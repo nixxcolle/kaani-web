@@ -42,13 +42,13 @@ Submitting sign-in, registration, or confirmation email requests has an immediat
 
 In **Authentication → URL Configuration**, allow the exact callback used by the running app, for example `https://nixxcolle.github.io/Kaani-web/auth` for GitHub Pages and `http://localhost:8080/Kaani-web/auth` for local Vite. Use the printed preview origin when testing other ports. The app computes the callback from its actual origin and Vite base path.
 
-Supabase's default email service only sends to organization team members. For public registration and confirmation emails, configure a custom SMTP service under the project's email settings. Keep email confirmation enabled; changing application text cannot repair an unavailable mail service. See the [official SMTP guide](https://supabase.com/docs/guides/auth/auth-smtp).
+Supabase's default email service only sends to organization team members. For public registration and confirmation emails, configure a custom SMTP service under the project's email settings. For this project, the owner has selected immediate access: disable Confirm email in Authentication → Sign In / Providers → Email and save. The app accepts the session returned by signUp and opens the quiz immediately; it never fabricates a session. This allows users to register email addresses they do not own. If confirmation is enabled again, email delivery must work. See the [official SMTP guide](https://supabase.com/docs/guides/auth/auth-smtp).
 
 For a confirmed account that still fails, inspect its latest `/token` error in [this project's Auth logs](https://supabase.com/dashboard/project/isdbsiocqiaxttlfysqq/logs/auth-logs). A `Database error` requires investigating the matching Auth/Postgres log entry rather than changing passwords or relaxing permissions blindly. The read-only `supabase/diagnostics/auth.sql` file checks account confirmation counts, signup triggers, profile columns, and constraints without returning user records. No database changes are applied by that script.
 
 Optional `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` environment variables can point the app to another project; configure both for the same project and rebuild. Never expose a service-role key in frontend configuration. See `.env.example`.
 
-The existing public Supabase project configuration remains in `src/lib/supabase.ts`. Public module and quiz reads were checked, including translations for the current remote text. This change does not configure the remote database, migrate existing users, verify remote row-level-security policies, or send live test reports. Guest learning and built-in content work offline after assets have loaded.
+The existing public Supabase project configuration remains in `src/lib/supabase.ts`. Public module and quiz reads were checked, including translations for the current remote text. This change does not configure the remote database, migrate existing users, verify remote row-level-security policies, or send live test reports. Built-in quiz questions remain available after assets have loaded; module listings require database access.
 
 Reports are only acknowledged after the remote insert succeeds. The `market_reports` table must support the fields in `src/lib/reports.ts`, including reporter name/contact, and enforce suitable insertion and read policies. Public browser-based moderation controls were removed. Moderation must run behind authenticated server-enforced permissions.
 
@@ -66,3 +66,13 @@ npm run deploy
 ```
 
 Deployment requires access to the existing GitHub Pages repository. No deployment was performed as part of these local changes.
+
+## Supabase module integration
+
+The SDK uses the project root URL (https://isdbsiocqiaxttlfysqq.supabase.co), not the REST endpoint. A supplied /rest/v1/ suffix is normalized; do not include square brackets around the public key. Rebuild after changing Vite environment variables.
+
+Both learning pages fetch only public.modules records on every mount and after app authentication changes, using ordered pages with exact counts. No built-in modules or static lesson content are merged or used as a fallback. Empty results render an empty state; read failures render an error and retry action. Text-only modules are retained. Refreshing reflects additions, updates, and deletions visible to the current role. Category, difficulty, and read-time labels are omitted because they are not stored in the queried schema. Uploaded file_data takes precedence over bundled file_name PDFs; a database filename alone does not upload a document to public/assets/docs.
+
+Run supabase/diagnostics/modules.sql as the project owner to compare the actual row count against anon/authenticated visibility, grants, and policies. The anon key cannot inspect or change RLS settings. supabase/modules-read-policy.sql is the owner-run repair for this public learning library. It grants anon/authenticated read access to the module fields used by the app, removes the three diagnosed anonymous creation/update/deletion policies, and revokes anonymous insert/update/delete grants. Other policies remain unchanged; it does not grant editing permissions to members. No SQL has been applied remotely by this update.
+
+Public module catalog reads use a separate session-free Supabase client and the existing anon SELECT policy, including when a member is signed in. Member authentication and private writes continue using the authenticated client. This does not grant new database permissions or expose non-public tables.

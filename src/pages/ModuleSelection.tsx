@@ -27,8 +27,8 @@ import { Badge } from "@/components/ui/badge";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
-import { supabase } from "@/lib/supabase";
-import { DEFAULT_LEARNING_MODULES, LearningModule } from "@/lib/data";
+import { fetchLearningModules } from "@/lib/modules";
+import { LearningModule } from "@/lib/data";
 import { useToast } from "@/hooks/use-toast";
 import { useLanguage } from "@/lib/language-context";
 
@@ -40,93 +40,40 @@ const ModuleSelection = () => {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
-  const [modules, setModules] = useState<LearningModule[]>(DEFAULT_LEARNING_MODULES);
+  const [modules, setModules] = useState<LearningModule[]>([]);
   const [activeModule, setActiveModule] = useState<LearningModule | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(false);
+  const [reload, setReload] = useState(0);
 
   useEffect(() => {
     const categoryParam = searchParams.get("category");
-    if (categoryParam) {
-      setSelectedCategory(categoryParam);
-    }
-  }, [searchParams]);
+    setSelectedCategory(categoryParam && modules.some(module => module.category === categoryParam) ? categoryParam : "All");
+  }, [searchParams, modules]);
 
   useEffect(() => {
-    const fetchModules = async () => {
-      try {
-        const { data, error } = await supabase
-          .from("modules")
-          .select("id, title, description, file_data, file_name")
-          .order("created_at", { ascending: true });
-
-        if (!error && data && data.length > 0) {
-          // Only keep modules that have actual file data or file name
-          const validData = data.filter((m) => 
-            (m.file_data && m.file_data.trim().length > 0) || 
-            (m.file_name && m.file_name.trim().length > 0)
-          );
-
-          const combined: LearningModule[] = [...DEFAULT_LEARNING_MODULES];
-
-          validData.forEach((mod, idx: number) => {
-            const existingIdx = combined.findIndex(e => e.id === mod.id);
-            if (existingIdx >= 0) {
-              if (mod.file_data) combined[existingIdx].file_data = mod.file_data;
-              if (mod.file_name) combined[existingIdx].file_name = mod.file_name;
-              if (mod.description) combined[existingIdx].description = mod.description;
-            } else {
-              const titleLower = (mod.title || "").toLowerCase();
-              const isFish = titleLower.includes("fish") || titleLower.includes("aquaculture") || titleLower.includes("marine");
-              const isLaw = titleLower.includes("law") || titleLower.includes("legal") || titleLower.includes("code");
-              
-              const category: LearningModule["category"] = isFish 
-                ? "Fisheries & Marine" 
-                : isLaw 
-                ? "Policy & Law" 
-                : "Sustainable Crops";
-
-              combined.push({
-                id: mod.id,
-                title: mod.title,
-                category,
-                description: mod.description || "Comprehensive guide on agricultural and fisheries management.",
-                readTimeMinutes: 10 + (idx % 5),
-                difficulty: "Beginner",
-                objectives: [
-                  "Understand fundamental biological and environmental principles",
-                  "Learn step-by-step best practices tailored for the Philippines",
-                  "Implement sustainable resource management"
-                ],
-                contentSections: [
-                  {
-                    heading: "Overview & Objectives",
-                    body: mod.description || "This module provides essential training on practical implementation.",
-                    keyTakeaway: "Consistent monitoring and adherence to biological thresholds are vital for long-term harvest sustainability."
-                  }
-                ],
-                file_name: mod.file_name || "physio-LP1 (1) (2).pdf",
-                file_data: mod.file_data
-              });
-            }
-          });
-
-          setModules(combined);
-        } else {
-          setModules(DEFAULT_LEARNING_MODULES);
-        }
-      } catch (err) {
-        console.warn("Using offline learning modules pool:", err);
-        setModules(DEFAULT_LEARNING_MODULES);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchModules();
+    const refresh = () => setReload(value => value + 1);
+    window.addEventListener('auth-change', refresh);
+    return () => window.removeEventListener('auth-change', refresh);
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    setModules([]);
+    setLoading(true);
+    setFetchError(false);
+    fetchLearningModules().then(data => {
+      if (!cancelled) setModules(data);
+    }).catch(() => {
+      if (!cancelled) setFetchError(true);
+    }).finally(() => {
+      if (!cancelled) setLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [reload]);
+
   const categories = useMemo(() => {
-    const cats = Array.from(new Set(modules.map(m => m.category)));
+    const cats = Array.from(new Set(modules.map(m => m.category).filter((category): category is NonNullable<LearningModule['category']> => Boolean(category))));
     return ["All", ...cats];
   }, [modules]);
 
@@ -134,7 +81,7 @@ const ModuleSelection = () => {
     let result = modules;
 
     if (selectedCategory !== "All") {
-      result = result.filter(m => m.category.toLowerCase() === selectedCategory.toLowerCase());
+      result = result.filter(m => m.category?.toLowerCase() === selectedCategory.toLowerCase());
     }
 
     const query = searchQuery.trim().toLowerCase();
@@ -152,14 +99,7 @@ const ModuleSelection = () => {
   };
 
   const handleOpenModuleGuide = (mod: LearningModule) => {
-    // 1. Direct to the actual PDF document asset if available
-    if (mod.file_name) {
-      const docUrl = `${import.meta.env.BASE_URL}assets/docs/${encodeURIComponent(mod.file_name)}`;
-      window.open(docUrl, "_blank", "noopener,noreferrer");
-      return;
-    }
-
-    // 2. Open base64 blob if present
+    // Database uploads may not exist among the bundled local assets.
     if (mod.file_data) {
       try {
         let base64Data = mod.file_data;
@@ -175,13 +115,21 @@ const ModuleSelection = () => {
         const blob = new Blob([byteArray], { type: "application/pdf" });
         const url = URL.createObjectURL(blob);
         window.open(url, "_blank", "noopener,noreferrer");
+        setTimeout(() => URL.revokeObjectURL(url), 60_000);
         return;
       } catch (e) {
         console.warn("Error decoding PDF blob:", e);
       }
     }
 
-    // 3. Fallback: ensure module is active in view
+    // Built-in lessons can reference bundled PDFs.
+    if (mod.file_name) {
+      const docUrl = `${import.meta.env.BASE_URL}assets/docs/${encodeURIComponent(mod.file_name)}`;
+      window.open(docUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
+
+    // Text-only lessons remain available in the reader.
     setActiveModule(mod);
   };
 
@@ -262,6 +210,11 @@ const ModuleSelection = () => {
               </div>
             </div>
 
+            {loading && <p role="status" className="text-center text-muted-foreground">{tx("Loading database modules…")}</p>}
+            {fetchError && <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-center space-y-3">
+              <p>{tx("Database modules could not be loaded. Check your connection or ask the administrator to check module read permissions.")}</p>
+              <Button variant="outline" onClick={() => setReload(value => value + 1)} disabled={loading}>{tx("Retry")}</Button>
+            </div>}
             {/* Modules Grid */}
             <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-2">
               {filteredModules.map((module) => (
@@ -273,15 +226,15 @@ const ModuleSelection = () => {
                   <div>
                     <div className="flex items-center justify-between gap-2 mb-4">
                       <div className="w-12 h-12 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-center group-hover:scale-105 transition-transform">
-                        {tx(getCategoryIcon(module.category))}
+                        {tx(getCategoryIcon(module.category || ''))}
                       </div>
                       <div className="flex items-center gap-2">
-                        <Badge variant="outline" className="text-[10px] uppercase font-bold border-slate-200 text-muted-foreground">
+                        {module.category && <Badge variant="outline" className="text-[10px] uppercase font-bold border-slate-200 text-muted-foreground">
                           {tx(module.category)}
-                        </Badge>
-                        <Badge className="text-[10px]" variant="secondary">
+                        </Badge>}
+                        {module.difficulty && <Badge className="text-[10px]" variant="secondary">
                           {tx(module.difficulty)}
-                        </Badge>
+                        </Badge>}
                       </div>
                     </div>
 
@@ -295,9 +248,9 @@ const ModuleSelection = () => {
                   </div>
 
                   <div className="pt-4 mt-4 border-t border-slate-100 flex items-center justify-between">
-                    <span className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                    {module.readTimeMinutes && <span className="text-xs font-medium text-muted-foreground flex items-center gap-1">
                       <Clock className="h-3.5 w-3.5" />
-                      {tx(module.readTimeMinutes)}{tx(" min read")}</span>
+                      {tx(module.readTimeMinutes)}{tx(" min read")}</span>}
 
                     <button type="button" onClick={(event) => { event.stopPropagation(); handleOpenModule(module); }} className="text-xs font-bold text-kaani-primary hover:underline flex items-center gap-1">{tx("Read Module →")}</button>
                   </div>
@@ -305,7 +258,7 @@ const ModuleSelection = () => {
               ))}
             </div>
 
-            {filteredModules.length === 0 && (
+            {!loading && !fetchError && filteredModules.length === 0 && (
               <div className="py-16 text-center bg-white rounded-3xl border border-slate-100 p-8">
                 <BookOpen className="h-12 w-12 text-slate-300 mx-auto mb-3" />
                 <h3 className="text-lg font-bold text-slate-800">{tx("No modules found")}</h3>
@@ -336,11 +289,11 @@ const ModuleSelection = () => {
               <div className="p-6 md:p-8 bg-gradient-to-r from-emerald-50 to-sky-50 border-b border-emerald-100 flex items-start justify-between gap-4">
                 <div className="space-y-1.5 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant="outline" className="text-xs border-emerald-300 bg-white font-bold text-emerald-800">
+                    {activeModule.category && <Badge variant="outline" className="text-xs border-emerald-300 bg-white font-bold text-emerald-800">
                       {tx(activeModule.category)}
-                    </Badge>
-                    <span className="text-xs text-muted-foreground flex items-center gap-1">
-                      <Clock className="h-3 w-3" /> {tx(activeModule.readTimeMinutes)}{tx(" min read")}</span>
+                    </Badge>}
+                    {activeModule.readTimeMinutes && <span className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Clock className="h-3 w-3" /> {tx(activeModule.readTimeMinutes)}{tx(" min read")}</span>}
                     <Button
                       variant="outline"
                       size="sm"
@@ -406,7 +359,7 @@ const ModuleSelection = () => {
 
               {/* Modal Footer Controls */}
               <div className="p-4 md:p-6 bg-slate-50 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
-                <Button
+                {(activeModule.file_data || activeModule.file_name) && <Button
                   variant="outline"
                   onClick={() => handleOpenModuleGuide(activeModule)}
                   className="rounded-xl flex items-center gap-2 text-xs font-bold border-emerald-300 text-emerald-800 bg-white hover:bg-emerald-50 hover:text-emerald-950 transition-colors shadow-xs"
@@ -414,7 +367,7 @@ const ModuleSelection = () => {
                   <FileText className="h-4 w-4 text-emerald-600" />
                   <span>{tx("Original PDF (English)")}</span>
                   <ExternalLink className="h-3.5 w-3.5 text-muted-foreground ml-0.5" />
-                </Button>
+                </Button>}
 
                 <div className="flex items-center gap-2">
                   <Button

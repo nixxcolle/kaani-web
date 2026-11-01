@@ -24,8 +24,8 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
-import { DEFAULT_LEARNING_MODULES, LearningModule } from "@/lib/data";
-import { supabase } from "@/lib/supabase";
+import { LearningModule } from "@/lib/data";
+import { fetchLearningModules } from "@/lib/modules";
 import { useLanguage } from "@/lib/language-context";
 
 const Learning = () => {
@@ -33,64 +33,32 @@ const Learning = () => {
   const { language, toggleLanguage, isFilipino, t } = useLanguage();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
-  const [modules, setModules] = useState<LearningModule[]>(DEFAULT_LEARNING_MODULES);
+  const [modules, setModules] = useState<LearningModule[]>([]);
+
+  const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(false);
+  const [reload, setReload] = useState(0);
 
   useEffect(() => {
-    const fetchModules = async () => {
-      try {
-        const { data, error } = await supabase
-          .from("modules")
-          .select("id, title, description, file_data, file_name")
-          .order("created_at", { ascending: true });
-
-        if (!error && data && data.length > 0) {
-          // Keep only modules with actual file data or file name
-          const valid = data.filter((m) => 
-            (m.file_data && m.file_data.trim().length > 0) || 
-            (m.file_name && m.file_name.trim().length > 0)
-          );
-
-          const list: LearningModule[] = [...DEFAULT_LEARNING_MODULES];
-          valid.forEach((mod) => {
-            const idx = list.findIndex(e => e.id === mod.id);
-            if (idx >= 0) {
-              if (mod.file_data) list[idx].file_data = mod.file_data;
-              if (mod.file_name) list[idx].file_name = mod.file_name;
-              if (mod.description) list[idx].description = mod.description;
-            } else {
-              list.push({
-                id: mod.id,
-                title: mod.title,
-                category: "Fisheries & Marine",
-                description: mod.description || "Comprehensive guide on fish anatomy, biological systems, and adaptations.",
-                readTimeMinutes: 15,
-                difficulty: "Beginner",
-                objectives: [
-                  "Understand fundamental biological and environmental principles",
-                  "Learn anatomical structures and physiological functions",
-                  "Implement sustainable aquatic resource management"
-                ],
-                contentSections: [
-                  {
-                    heading: "Overview & Objectives",
-                    body: mod.description || "Detailed educational material on fish physiology and morphology.",
-                    keyTakeaway: "Healthy physiological systems are the foundation for thriving fisheries and sustainable aquaculture."
-                  }
-                ],
-                file_name: mod.file_name || "physio-LP1 (1) (2).pdf",
-                file_data: mod.file_data
-              });
-            }
-          });
-          setModules(list);
-        }
-      } catch (e) {
-        console.warn("Using offline learning modules pool:", e);
-      }
-    };
-
-    fetchModules();
+    const refresh = () => setReload(value => value + 1);
+    window.addEventListener('auth-change', refresh);
+    return () => window.removeEventListener('auth-change', refresh);
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    setModules([]);
+    setLoading(true);
+    setFetchError(false);
+    fetchLearningModules().then(data => {
+      if (!cancelled) setModules(data);
+    }).catch(() => {
+      if (!cancelled) setFetchError(true);
+    }).finally(() => {
+      if (!cancelled) setLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [reload]);
 
   const features = [
     {
@@ -164,7 +132,7 @@ const Learning = () => {
   ];
 
   const categories = useMemo(() => {
-    const cats = Array.from(new Set(modules.map(m => m.category)));
+    const cats = Array.from(new Set(modules.map(m => m.category).filter((category): category is NonNullable<LearningModule['category']> => Boolean(category))));
     return ["All", ...cats];
   }, [modules]);
 
@@ -264,11 +232,11 @@ const Learning = () => {
           </div>
 
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6 max-w-6xl mx-auto">
-            {features.map((feature, index) => {
+            {features.map((feature) => {
               const Icon = feature.icon;
               return (
                 <Card 
-                  key={index} 
+                  key={feature.title} 
                   className="text-center rounded-3xl border border-slate-100 shadow-card hover:shadow-elevated transition-all duration-300 p-6 flex flex-col justify-between group hover:-translate-y-1"
                 >
                   <CardHeader className="p-0">
@@ -299,7 +267,12 @@ const Learning = () => {
             <p className="text-sm md:text-base text-muted-foreground">{tx("Select a module to access step-by-step instructions, key takeaways, and field checklists.")}</p>
           </div>
 
-          {filteredModules.length === 0 ? (
+          {loading && <p role="status" className="text-center mb-6 text-muted-foreground">{tx("Loading database modules…")}</p>}
+          {fetchError && <div role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4 mb-6 text-center space-y-3">
+            <p>{tx("Database modules could not be loaded. Check your connection or ask the administrator to check module read permissions.")}</p>
+            <Button variant="outline" onClick={() => setReload(value => value + 1)} disabled={loading}>{tx("Retry")}</Button>
+          </div>}
+          {!loading && !fetchError && filteredModules.length === 0 ? (
             <div className="text-center py-12 bg-white rounded-3xl max-w-md mx-auto border border-dashed border-slate-200 p-8">
               <BookOpen className="h-10 w-10 text-muted-foreground mx-auto mb-3 opacity-60" />
               <p className="font-bold text-slate-700">{tx("No modules match your query")}</p>
@@ -315,18 +288,18 @@ const Learning = () => {
               >{tx("Clear Search")}</Button>
             </div>
           ) : (
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto">
-              {filteredModules.map((module, index) => (
+            <div className={`grid gap-6 mx-auto ${filteredModules.length === 1 ? "max-w-md" : filteredModules.length === 2 ? "md:grid-cols-2 max-w-4xl" : "md:grid-cols-2 lg:grid-cols-3 max-w-6xl"}`}>
+              {filteredModules.map((module) => (
                 <Card 
-                  key={index} 
+                  key={module.id} 
                   className="rounded-3xl border border-slate-100 shadow-card hover:shadow-elevated transition-all duration-300 flex flex-col justify-between group hover:-translate-y-1 bg-white overflow-hidden"
                 >
                   <CardHeader className="p-6 pb-4">
                     <div className="flex items-center justify-between mb-3">
-                      <Badge variant="outline" className="text-xs font-semibold border-emerald-200 text-kaani-primary bg-emerald-50/50">
+                      {module.category && <Badge variant="outline" className="text-xs font-semibold border-emerald-200 text-kaani-primary bg-emerald-50/50">
                         {tx(module.category)}
-                      </Badge>
-                      {tx(getDifficultyBadge(module.difficulty))}
+                      </Badge>}
+                      {tx(module.difficulty && getDifficultyBadge(module.difficulty))}
                     </div>
                     <CardTitle className="text-xl font-bold font-heading text-slate-900 group-hover:text-kaani-primary transition-colors">
                       {tx(module.title)}
@@ -339,11 +312,11 @@ const Learning = () => {
                     <div className="flex items-center justify-between text-xs text-muted-foreground border-t border-slate-100 pt-3">
                       <span className="flex items-center gap-1">
                         <BookOpen className="h-3.5 w-3.5 text-kaani-primary" />
-                        {tx(module.file_name ? "Official PDF Guide" : "Interactive Guide")}
+                        {tx((module.file_name || module.file_data) ? "Official PDF Guide" : "Interactive Guide")}
                       </span>
-                      <span className="flex items-center gap-1">
+                      {module.readTimeMinutes && <span className="flex items-center gap-1">
                         <Clock className="h-3.5 w-3.5 text-kaani-primary" />
-                        {tx(module.readTimeMinutes)}{tx(" min read")}</span>
+                        {tx(module.readTimeMinutes)}{tx(" min read")}</span>}
                     </div>
 
                     <Button 

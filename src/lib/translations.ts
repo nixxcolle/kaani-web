@@ -826,6 +826,12 @@ Please pause before trying again.|Maghintay muna bago subukang muli.
 Retry available in|Maaari muling subukan pagkalipas ng
 seconds.|segundo.
 Email requests are paused. Password sign-in remains available for confirmed accounts.|Pansamantalang nakahinto ang mga kahilingan sa email. Maaari pa ring mag-sign in gamit ang password ang mga account na kumpirmado na.
+Loading database modules…|Nilo-load ang mga modyul mula sa database…
+Database modules could not be loaded. Previously loaded or built-in modules are shown. Check your connection or ask the administrator to check module read permissions.|Hindi ma-load ang mga modyul mula sa database. Ipinapakita ang mga dating na-load o nakahandang modyul. Suriin ang iyong koneksiyon o ipasuri sa tagapangasiwa ang pahintulot sa pagbasa ng mga modyul.
+Retry|Subukang muli
+INTRODUCTION TO FISH DESIGN|PANIMULA SA DISENYO NG ISDA
+HELLOW THIS IS FOR TRIAL ONLY|KUMUSTA, PARA SA PAGSUBOK LAMANG ITO
+Database modules could not be loaded. Check your connection or ask the administrator to check module read permissions.|Hindi ma-load ang mga modyul mula sa database. Suriin ang iyong koneksiyon o ipasuri sa tagapangasiwa ang pahintulot sa pagbasa ng mga modyul.
 `;
 
 export const filipino: Record<string, string> = Object.fromEntries(pairs.trim().split('\n').map(line => line.split('|').map(part => part.trim())));

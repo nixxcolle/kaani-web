@@ -176,3 +176,69 @@ test('commission calculations use finite, nonnegative cents; inquiries remain pe
   assert.equal(commission.recordMarketTransaction(order).isDuplicate, true);
   assert.equal(commission.getMarketTransactions().length, 1);
 });
+
+test('Supabase configuration accepts the project root or REST URL without doubling API paths', () => {
+  const { projectUrl } = load('src/lib/supabase-config.ts');
+  for (const value of ['https://example.supabase.co', ' https://example.supabase.co/rest/v1/ ', 'https://example.supabase.co/rest/v1']) assert.equal(projectUrl(value), 'https://example.supabase.co');
+  for (const value of ['not a URL', 'javascript:alert(1)', 'https://user:pass@example.com', 'https://example.com/auth/v1', 'https://example.com/?key=secret']) assert.throws(() => projectUrl(value));
+});
+
+test('modules fetch only database rows across pages and reflect additions, edits and deletions', async () => {
+  let rows = [
+    { id: 'remote-text', title: 'Marine guide', description: 'Text only', file_name: null, file_data: null },
+    { id: 'remote-pdf', title: 'Crop guide', description: null, file_name: 'remote.pdf', file_data: 'pdf' },
+  ];
+  const offsets = [];
+  const builder = { select() { return this; }, order() { return this; }, async range(start) { offsets.push(start); return { data: rows.slice(start, start + 1), error: null, count: rows.length }; } };
+  const { fetchLearningModules } = load('src/lib/modules.ts', { './supabase': { supabase: { from: () => { throw new Error('Member client must not read public modules'); } }, moduleCatalog: { from: table => { assert.equal(table, 'modules'); return builder; } } } });
+  let result = await fetchLearningModules();
+  assert.deepEqual(offsets, [0, 1]);
+  assert.deepEqual(result.map(m => m.id), rows.map(m => m.id));
+  assert.equal(result[0].description, 'Text only');
+  assert.equal(result[0].category, undefined);
+  assert.equal(result[0].difficulty, undefined);
+  assert.equal(result[0].readTimeMinutes, undefined);
+  rows = [{ ...rows[1], title: 'Updated title' }, { ...rows[0], id: 'new-module' }];
+  result = await fetchLearningModules();
+  assert.deepEqual(result.map(m => m.id), ['remote-pdf', 'new-module']);
+  assert.equal(result[0].title, 'Updated title');
+  rows = [];
+  assert.deepEqual(await fetchLearningModules(), []);
+});
+
+test('module permission and network errors propagate instead of pretending to load successfully', async () => {
+  const builder = { select() { return this; }, order() { return this; }, async range() { return { data: null, count: null, error: { code: '42501' } }; } };
+  const { fetchLearningModules } = load('src/lib/modules.ts', { './supabase': { moduleCatalog: { from: () => builder } } });
+  await assert.rejects(fetchLearningModules(), error => error.code === '42501');
+  builder.range = async () => { throw new Error('offline'); };
+  await assert.rejects(fetchLearningModules(), /offline/);
+  builder.range = async () => ({ data: [], error: null, count: 1 });
+  await assert.rejects(fetchLearningModules(), /pagination/);
+  builder.range = async () => ({ data: [], error: null, count: 0 });
+  assert.deepEqual(await fetchLearningModules(), []);
+});
+
+test('registration with confirmation disabled authenticates immediately from the returned server session', async () => {
+  const user = { id: 'new-member', email: 'test@example.com', created_at: '2026-10-29', user_metadata: { name: 'Member' } };
+  const auth = load('src/lib/auth.ts', { './supabase': { supabase: { auth: { signUp: async () => ({ data: { user, session: { user } }, error: null }) } } } });
+  const result = await auth.signUp({ email: user.email, password: 'test-password', name: 'Member', role: 'user' });
+  assert.equal(result.success, true);
+  assert.equal(result.confirmationRequired, undefined);
+  assert.equal(result.user.id, user.id);
+  assert.equal(JSON.parse(localStorage.getItem('user')).id, user.id);
+});
+
+
+test('public module catalog never loads a cached member session', async () => {
+  const source = fs.readFileSync('src/lib/supabase.ts', 'utf8').replaceAll('import.meta.env', '({BASE_URL: "/Kaani-web/"})');
+  const output = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+  const calls = [];
+  const mockRequire = name => name === '@supabase/supabase-js' ? { createClient: (url, key, options) => { const client = { url, key, options }; calls.push(client); return client; } } : load('src/lib/supabase-config.ts');
+  const module = { exports: {} };
+  window.location = { origin: 'http://localhost:4173' };
+  new Function('require', 'module', 'exports', output)(mockRequire, module, module.exports);
+  assert.notEqual(module.exports.moduleCatalog, module.exports.supabase);
+  assert.equal(await module.exports.moduleCatalog.options.accessToken(), null);
+  assert.equal(module.exports.supabase.options.auth.persistSession, true);
+  assert.equal(calls.length, 2);
+});

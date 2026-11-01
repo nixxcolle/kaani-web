@@ -16,10 +16,10 @@ export interface QuizQuestion {
 export interface LearningModule {
   id: string;
   title: string;
-  category: "Fisheries & Marine" | "Sustainable Crops" | "Agri-Tech" | "Policy & Law";
+  category?: "Fisheries & Marine" | "Sustainable Crops" | "Agri-Tech" | "Policy & Law";
   description: string;
-  readTimeMinutes: number;
-  difficulty: "Beginner" | "Intermediate" | "Advanced";
+  readTimeMinutes?: number;
+  difficulty?: "Beginner" | "Intermediate" | "Advanced";
   objectives: string[];
   contentSections: {
     heading: string;
