@@ -61,10 +61,10 @@ export const TRANSLATIONS: Record<Language, Record<string, string>> = {
   },
   fil: {
     // Nav
-    "nav.home": "Unang pahina",
-    "nav.market": "Pamilihan ng Kaani",
+    "nav.home": "Simula",
+    "nav.market": "Pamilihan",
     "nav.learning": "Pag-aaral",
-    "nav.legal": "Gabay sa Batas",
+    "nav.legal": "Batas",
     "nav.sustainability": "Likas-kaya",
     "nav.login": "Mag-login",
     "nav.register": "Magpatala",
@@ -117,6 +117,11 @@ export const TRANSLATIONS: Record<Language, Record<string, string>> = {
     "status.availableDesc": "Kasalukuyang mabibili o maaaring ipagtanong ang produkto.",
     "status.outOfStockDesc": "Walang natitirang stock ang produkto sa ngayon.",
     "status.unavailableDesc": "Kasalukuyang hindi mabibili o pansamantalang hindi magagamit.",
+  },
+  war: {
+    'nav.home': 'Syahan', 'nav.market': 'Merkado', 'nav.learning': 'Pag-aram',
+    'nav.legal': 'Balaod', 'nav.sustainability': 'Pag-ataman',
+    'nav.login': 'Sumulod', 'nav.register': 'Magrehistro',
   },
 };
 

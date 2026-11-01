@@ -6,12 +6,11 @@ export interface User {
   id: string;
   email: string;
   name: string;
-  role: 'user';
   created_at: string;
   is_guest?: boolean;
 }
 export interface LoginData { email: string; password: string }
-export interface SignupData extends LoginData { name: string; role: 'user' }
+export interface SignupData extends LoginData { name: string }
 type AuthResult = { success: boolean; user?: User; error?: string; confirmationRequired?: boolean; retryAfterSeconds?: number; retryScope?: 'email' | 'all' };
 
 const failedAuth = (error: unknown, fallback: string): AuthResult => ({
@@ -34,14 +33,15 @@ function rememberUser(user: User): User {
 const profile = (user: AuthUser): User => ({
   id: user.id, email: user.email || '',
   name: user.user_metadata?.name || user.email?.split('@')[0] || 'Learner',
-  role: 'user', created_at: user.created_at,
+  created_at: user.created_at,
 });
 
 export async function signUp(data: SignupData): Promise<AuthResult> {
+  if (typeof data.name !== 'string' || !data.name.trim() || data.name.trim().length > 120) return { success: false, error: 'Enter your full name (up to 120 characters).' };
   try {
     const { data: result, error } = await supabase.auth.signUp({
       email: data.email.trim().toLowerCase(), password: data.password,
-      options: { data: { name: data.name.trim(), role: 'user' }, emailRedirectTo: authRedirectUrl },
+      options: { data: { name: data.name.trim() }, emailRedirectTo: authRedirectUrl },
     });
     if (error) return failedAuth(error, 'Sign up failed. Please try again.');
     if (!result.user) return { success: false, error: 'Sign up failed. Please try again.' };
@@ -98,7 +98,7 @@ export async function logout(): Promise<void> {
 }
 
 export function createGuestSession(name = 'Guest Learner'): User {
-  const user: User = { id: 'guest-' + crypto.randomUUID(), email: '', name, role: 'user', created_at: new Date().toISOString(), is_guest: true };
+  const user: User = { id: 'guest-' + crypto.randomUUID(), email: '', name, created_at: new Date().toISOString(), is_guest: true };
   sessionStorage.setItem('kaani_guest', JSON.stringify(user));
   localStorage.setItem('user', JSON.stringify(user));
   localStorage.setItem('isAuthenticated', 'true');

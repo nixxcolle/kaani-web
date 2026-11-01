@@ -23,6 +23,8 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import heroImage from "@/assets/images/Catbalogan.png";
 
+const heroButtonClass = 'h-14 w-full px-4 text-sm lg:text-base font-bold rounded-2xl border-2 shadow-elevated transition-colors flex items-center justify-center gap-2';
+
 const Index = () => {
   const tx = useText();
   const features = [
@@ -134,39 +136,15 @@ const Index = () => {
             <p className="text-sm sm:text-base md:text-lg text-emerald-50/95 font-normal max-w-2xl mx-auto leading-relaxed drop-shadow-sm">{tx("Simplifying laws, sharing practical guides, and connecting communities to maximize harvests and sustainable practices.")}</p>
 
             {/* CTA Buttons */}
-            <div className="flex flex-col sm:flex-row flex-wrap gap-3 justify-center items-stretch sm:items-center max-w-sm sm:max-w-none mx-auto pt-3">
-              <Button 
-                size="lg" 
-                className="w-full sm:w-auto bg-[#0d533a] hover:bg-[#083a28] text-white font-bold px-6 py-5 rounded-2xl shadow-elevated transition-all duration-200 hover:scale-102 flex items-center justify-center gap-2 text-sm sm:text-base group ring-2 ring-emerald-400/40"
-                asChild
-              >
-                <Link to="/market">
-                  <Store className="h-4 w-4 text-emerald-300" />
-                  <span>{tx("Kaani Market")}</span>
-                  <ArrowRight className="h-4 w-4 text-emerald-300 transition-transform duration-200 group-hover:translate-x-1" />
-                </Link>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-stretch max-w-sm md:max-w-3xl mx-auto pt-3">
+              <Button size="lg" className={`${heroButtonClass} border-emerald-700 bg-[#0d533a] hover:bg-[#083a28] text-white`} asChild>
+                <Link to="/market"><Store className="h-4 w-4" /><span>{tx("Kaani Market")}</span><ArrowRight className="h-4 w-4" /></Link>
               </Button>
-
-              <Button 
-                size="lg" 
-                className="w-full sm:w-auto bg-white hover:bg-emerald-50 text-emerald-950 font-bold px-6 py-5 rounded-2xl shadow-elevated transition-all duration-200 hover:scale-102 flex items-center justify-center gap-2 text-sm sm:text-base group"
-                asChild
-              >
-                <Link to="/learning">
-                  <span>{tx("Learning Hub")}</span>
-                  <ChevronRight className="h-4 w-4 text-emerald-700" />
-                </Link>
+              <Button size="lg" className={`${heroButtonClass} border-white bg-white hover:bg-emerald-50 text-emerald-950`} asChild>
+                <Link to="/learning"><BookOpen className="h-4 w-4" /><span>{tx("Learning Hub")}</span><ChevronRight className="h-4 w-4" /></Link>
               </Button>
-
-              <Button 
-                size="lg" 
-                variant="outline" 
-                className="w-full sm:w-auto border-2 border-white/80 bg-black/25 hover:bg-white hover:text-emerald-950 text-white font-bold px-6 py-5 rounded-2xl backdrop-blur-md transition-all duration-200 text-sm sm:text-base"
-                asChild
-              >
-                <Link to="/legal">
-                  <span>{tx("Legal Guidance")}</span>
-                </Link>
+              <Button size="lg" className={`${heroButtonClass} border-white bg-white hover:bg-emerald-50 text-emerald-950`} asChild>
+                <Link to="/legal"><Scale className="h-4 w-4" /><span>{tx("Legal Guidance")}</span><ChevronRight className="h-4 w-4" /></Link>
               </Button>
             </div>
           </div>

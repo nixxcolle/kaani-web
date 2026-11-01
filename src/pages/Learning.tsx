@@ -26,11 +26,10 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { LearningModule } from "@/lib/data";
 import { fetchLearningModules } from "@/lib/modules";
-import { useLanguage } from "@/lib/language-context";
+import LanguageSelector from "@/components/LanguageSelector";
 
 const Learning = () => {
   const tx = useText();
-  const { language, toggleLanguage, isFilipino, t } = useLanguage();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
   const [modules, setModules] = useState<LearningModule[]>([]);
@@ -172,16 +171,7 @@ const Learning = () => {
                 <BookOpen className="h-4 w-4" />
                 <span>{tx("Comprehensive Knowledge Center")}</span>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={toggleLanguage}
-                className="h-8 rounded-full border-emerald-300 bg-white/90 hover:bg-emerald-50 text-emerald-900 font-bold text-xs flex items-center gap-1.5 shadow-2xs"
-                title={tx("Isalin sa Filipino / Switch to English")}
-              >
-                <Languages className="h-3.5 w-3.5 text-emerald-700" />
-                <span>{isFilipino ? "Switch to English" : "Isalin sa Filipino"}</span>
-              </Button>
+              <LanguageSelector />
             </div>
 
             <h1 className="text-2xl sm:text-4xl md:text-5xl font-extrabold font-heading text-kaani-dark tracking-tight">

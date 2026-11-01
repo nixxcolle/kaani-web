@@ -1,5 +1,5 @@
 import { useText } from "@/lib/translate";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useSearchParams, Link } from "react-router-dom";
 import { 
   Search, 
@@ -53,7 +53,6 @@ import Footer from "@/components/Footer";
 import { 
   Product, 
   ProductStatus,
-  INITIAL_PRODUCTS, 
   MARKET_CATEGORIES, 
   MARKET_LOCATIONS,
   getProductEffectiveStatus
@@ -65,6 +64,9 @@ import {
   REPORT_CATEGORIES, 
   submitMarketReport, 
 } from "@/lib/reports";
+import { supabase } from '@/lib/supabase';
+import { fetchProducts, saveProduct, deleteProduct, validatePhoto } from '@/lib/products';
+import { useToast } from '@/hooks/use-toast';
 import heroBannerImg from "@/assets/images/market-hero-banner.jpg";
 
 const categoryIcons: Record<string, React.ElementType> = {
@@ -83,6 +85,8 @@ const ITEMS_PER_PAGE = 8;
 const prodImg = (src: string) =>
   src.startsWith("/assets/") ? `${import.meta.env.BASE_URL}${src.slice(1)}` : src;
 
+const EMPTY_PRODUCT: Partial<Product> = { name: '', category: 'Vegetables & Fruits', type: 'Farm Product', price: 50, unit: 'kg', availableStock: 0, stockUnit: 'kg', status: 'Available', location: 'Catbalogan City, Samar', seller: '', sellerPhone: '', description: '', image: '' };
+
 const Market = () => {
   const tx = useText();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -90,23 +94,37 @@ const Market = () => {
   const initialCategory = searchParams.get("cat") || "All Products";
 
   // Catalog State
-  const [products, setProducts] = useState<Product[]>(() => {
+  const [products, setProducts] = useState<Product[]>([]);
+  const [ownerId, setOwnerId] = useState<string | null>(null);
+  const [myProducts, setMyProducts] = useState(false);
+  const [catalogError, setCatalogError] = useState('');
+  const [catalogLoading, setCatalogLoading] = useState(true);
+  const { toast } = useToast();
+  const catalogRequest = useRef(0);
+  const mutationPending = useRef(false);
+  const [saving, setSaving] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
+  const [photo, setPhoto] = useState<File | null>(null);
+  const reloadProducts = useCallback(async () => {
+    const request = ++catalogRequest.current;
     try {
-      const saved = localStorage.getItem("kaani_market_products");
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          // Merge with initial products to guarantee all 8 standard items exist
-          const existingIds = new Set(parsed.map((p: Product) => p.id));
-          const missing = INITIAL_PRODUCTS.filter(p => !existingIds.has(p.id));
-          return [...parsed, ...missing];
-        }
-      }
-    } catch (e) {
-      console.error(e);
-    }
-    return INITIAL_PRODUCTS;
-  });
+      const data = await fetchProducts();
+      if (request === catalogRequest.current) { setProducts(data); setDetailProduct(previous => previous ? data.find(product => product.id === previous.id) || null : null); setContactProduct(previous => previous ? data.find(product => product.id === previous.id) || null : null); setCatalogError(''); }
+    } catch (error) {
+      if (request === catalogRequest.current) setCatalogError(error instanceof Error ? error.message : 'Products could not be loaded.');
+    } finally { if (request === catalogRequest.current) setCatalogLoading(false); }
+  }, []);
+  useEffect(() => {
+    let active = true;
+    const refreshUser = async () => { const { data } = await supabase.auth.getUser(); if (active) setOwnerId(data.user?.id || null); };
+    void refreshUser(); void reloadProducts();
+    window.addEventListener('auth-change', refreshUser); window.addEventListener('focus', reloadProducts);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => { if (active) { setOwnerId(session?.user.id || null); if (!session?.user) setMyProducts(false); } });
+    const channel = supabase.channel('marketplace-catalog').on('postgres_changes', { event: '*', schema: 'public', table: 'marketplace_products' }, () => { void reloadProducts(); }).subscribe();
+    const interval = setInterval(() => { if (document.visibilityState === 'visible') void reloadProducts(); }, 30000);
+    return () => { active = false; subscription.unsubscribe(); void supabase.removeChannel(channel); clearInterval(interval); window.removeEventListener('auth-change', refreshUser); window.removeEventListener('focus', reloadProducts); };
+  }, [reloadProducts]);
 
   // Filter States
   const [searchQuery, setSearchQuery] = useState(initialSearch);
@@ -159,21 +177,23 @@ const Market = () => {
   const [buyerMessage, setBuyerMessage] = useState("");
 
   // Sell Form State (includes availability status)
-  const [newProduct, setNewProduct] = useState<Partial<Product>>({
-    name: "",
-    category: "Vegetables & Fruits",
-    type: "Farm Product",
-    price: 50,
-    unit: "kg",
-    availableStock: 25,
-    stockUnit: "kg",
-    status: "Available",
-    location: "Catbalogan City, Samar",
-    seller: "",
-    sellerPhone: "",
-    description: "",
-    image: `${import.meta.env.BASE_URL}assets/images/market/vegetables-bundle.jpg`,
-  });
+  const [newProduct, setNewProduct] = useState<Partial<Product>>(EMPTY_PRODUCT);
+  const openCreate = () => {
+    if (mutationPending.current) return;
+    setEditingProduct(null); setPhoto(null); setNewProduct({ ...EMPTY_PRODUCT });
+    setAgreeRules(false); setRulesError(''); setSellSuccess(false); setIsSellModalOpen(true);
+  };
+  const openEdit = (product: Product) => {
+    if (product.ownerId !== ownerId || mutationPending.current) return;
+    setEditingProduct(product); setPhoto(null); setNewProduct({ ...product });
+    setAgreeRules(true); setRulesError(''); setSellSuccess(false); setIsSellModalOpen(true);
+  };
+  useEffect(() => {
+    if (!photo) return;
+    const preview = URL.createObjectURL(photo);
+    setNewProduct(previous => ({ ...previous, image: preview }));
+    return () => URL.revokeObjectURL(preview);
+  }, [photo]);
 
   // Update URL params
   useEffect(() => {
@@ -248,6 +268,7 @@ const Market = () => {
   // Filter products
   const filteredProducts = useMemo(() => {
     return products.filter((prod) => {
+      if (myProducts && prod.ownerId !== ownerId) return false;
       // Hide listings removed/hidden by admin
       if (prod.is_hidden) {
         return false;
@@ -283,7 +304,7 @@ const Market = () => {
       }
       return true;
     });
-  }, [products, activeCategory, selectedLocation, selectedType, minPrice, maxPrice, searchQuery, tx]);
+  }, [products, myProducts, ownerId, activeCategory, selectedLocation, selectedType, minPrice, maxPrice, searchQuery, tx]);
 
   // Sort products
   const sortedProducts = useMemo(() => {
@@ -338,16 +359,9 @@ const Market = () => {
   };
 
   const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        if (typeof reader.result === "string") {
-          setNewProduct((prev) => ({ ...prev, image: reader.result as string }));
-        }
-      };
-      reader.readAsDataURL(file);
-    }
+    const file = e.target.files?.[0]; if (!file) return;
+    try { validatePhoto(file); setPhoto(file); setRulesError(''); }
+    catch (error) { setRulesError(error instanceof Error ? error.message : 'Invalid photo.'); e.target.value = ''; }
   };
 
   const handleContactSubmit = (e: React.FormEvent) => {
@@ -372,77 +386,34 @@ const Market = () => {
 
   };
 
-  const handleSellSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newProduct.name || !newProduct.price || !newProduct.seller) return;
-
-    if (!agreeRules) {
-      setRulesError(
-        "Please read and agree to the Kaani Web Marketplace Rules before publishing your listing."
-      );
-      return;
-    }
-
-    const initialStock = Number(newProduct.availableStock) || 0;
-    const initialStatus: ProductStatus =
-      (newProduct.status as ProductStatus) ||
-      (initialStock <= 0 ? "Out of Stock" : "Available");
-
-    const created: Product = {
-      id: `custom-${Date.now()}`,
-      name: newProduct.name || "Local Harvest",
-      category: (newProduct.category as Product["category"]) || "Vegetables & Fruits",
-      type: (newProduct.type as Product["type"]) || "Farm Product",
-      seller: newProduct.seller || "Local Farmer",
-      sellerPhone: newProduct.sellerPhone || "+63 900 000 0000",
-      location: newProduct.location || "Catbalogan City, Samar",
-      price: Number(newProduct.price) || 50,
-      unit: newProduct.unit || "kg",
-      availableStock: initialStock,
-      stockUnit: newProduct.stockUnit || "kg",
-      status: initialStatus,
-      agreedToRules: true,
-      agreedAt: new Date().toISOString(),
-      image: newProduct.image || `${import.meta.env.BASE_URL}assets/images/market/vegetables-bundle.jpg`,
-      description: newProduct.description || "Freshly harvested and locally grown with care.",
-      harvestDate: "Just listed",
-      rating: 5.0,
-      isFeatured: true,
-      createdAt: new Date().toISOString(),
-    };
-
-    const updatedList = [created, ...products];
+  const handleSellSubmit = async (e: React.FormEvent) => {
+    e.preventDefault(); if (mutationPending.current) return;
+    if (!agreeRules) { setRulesError('Please read and agree to the Kaani Web Marketplace Rules before publishing your listing.'); return; }
+    mutationPending.current = true; setSaving(true); setRulesError('');
     try {
-      localStorage.setItem("kaani_market_products", JSON.stringify(updatedList));
-    } catch (err) {
-      console.error(err);
-      setRulesError("The listing could not be saved. Try a smaller photo or free up browser storage.");
-      return;
-    }
-    setProducts(updatedList);
-
-    setSellSuccess(true);
-    setAgreeRules(false);
-    setRulesError("");
-    setTimeout(() => {
-      setSellSuccess(false);
-      setIsSellModalOpen(false);
-      setNewProduct({
-        name: "",
-        category: "Vegetables & Fruits",
-        type: "Farm Product",
-        price: 50,
-        unit: "kg",
-        availableStock: 25,
-        stockUnit: "kg",
-        status: "Available",
-        location: "Catbalogan City, Samar",
-        seller: "",
-        sellerPhone: "",
-        description: "",
-        image: `${import.meta.env.BASE_URL}assets/images/market/vegetables-bundle.jpg`,
-      });
-    }, 1800);
+      const result = await saveProduct(newProduct, photo, editingProduct || undefined);
+      setProducts(previous => [result.product, ...previous.filter(product => product.id !== result.product.id)]);
+      setDetailProduct(previous => previous?.id === result.product.id ? result.product : previous);
+      setContactProduct(previous => previous?.id === result.product.id ? result.product : previous);
+      setSellSuccess(true); setPhoto(null); setCurrentPage(1);
+      toast({ title: 'Product saved', description: result.warning || 'Your product is now saved in the marketplace database.' });
+      void reloadProducts();
+    } catch (error) { setRulesError(error instanceof Error ? error.message : 'Product could not be saved.'); }
+    finally { mutationPending.current = false; setSaving(false); }
+  };
+  const handleDelete = async () => {
+    if (!deleteTarget || mutationPending.current) return;
+    mutationPending.current = true; setSaving(true);
+    try {
+      const result = await deleteProduct(deleteTarget);
+      setProducts(previous => previous.filter(product => product.id !== deleteTarget.id));
+      setDetailProduct(previous => previous?.id === deleteTarget.id ? null : previous);
+      setContactProduct(previous => previous?.id === deleteTarget.id ? null : previous);
+      setCurrentPage(1); setDeleteTarget(null);
+      toast({ title: 'Product deleted', description: result.warning });
+      void reloadProducts();
+    } catch (error) { toast({ title: 'Delete failed', description: error instanceof Error ? error.message : 'Product could not be deleted.', variant: 'destructive' }); }
+    finally { mutationPending.current = false; setSaving(false); }
   };
 
   return (
@@ -486,7 +457,7 @@ const Market = () => {
 
               <div className="pt-2 flex flex-wrap items-center gap-3">
                 <Button
-                  onClick={() => setIsSellModalOpen(true)}
+                  onClick={openCreate}
                   className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl px-4 py-2 text-sm shadow-md transition-all active:scale-95 flex items-center gap-2"
                 >
                   <PlusCircle className="h-4 w-4" />
@@ -583,7 +554,7 @@ const Market = () => {
                 }}
                 className="w-full bg-[#f8faf9] border border-emerald-200 text-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600 font-medium"
               >
-                {MARKET_LOCATIONS.map((loc) => (
+                {Array.from(new Set([...MARKET_LOCATIONS, ...products.map(product => product.location)])).map((loc) => (
                   <option key={loc} value={loc}>
                     {tx(loc)}
                   </option>
@@ -724,6 +695,7 @@ const Market = () => {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-2 border-b border-emerald-100/80 pb-3">
               <div>
                 <h2 className="text-xl font-extrabold text-slate-900 font-heading">{tx("Featured Products")}</h2>
+                <div className="flex flex-wrap gap-2">{ownerId && <Button variant={myProducts ? 'default' : 'outline'} onClick={() => { setMyProducts(value => !value); setCurrentPage(1); }}>{tx(myProducts ? 'Show All Products' : 'My Products')}</Button>}<Button variant="outline" onClick={() => void reloadProducts()}>{tx('Refresh Products')}</Button></div>
                 <p className="text-xs text-slate-500 font-medium">{tx("Showing ")}{tx(sortedProducts.length > 0 ? (currentPage - 1) * ITEMS_PER_PAGE + 1 : 0)}{tx(" - ")}{tx(Math.min(currentPage * ITEMS_PER_PAGE, sortedProducts.length))}{tx(" of ")}{tx(sortedProducts.length)}{tx(" local items")}</p>
               </div>
 
@@ -763,7 +735,7 @@ const Market = () => {
             </div>
 
             {/* PRODUCT GRID (4 columns on lg/xl desktop) */}
-            {paginatedProducts.length === 0 ? (
+            {!catalogLoading && !catalogError && paginatedProducts.length === 0 ? (
               <div className="bg-white rounded-3xl p-12 text-center border border-emerald-100 space-y-4">
                 <div className="w-16 h-16 rounded-full bg-emerald-50 text-emerald-700 flex items-center justify-center mx-auto">
                   <Search className="h-8 w-8" />
@@ -892,7 +864,7 @@ const Market = () => {
                           <div className="space-y-1 mt-1.5 text-xs text-slate-500">
                             <div className="flex items-center gap-1.5 truncate">
                               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-                              <span className="font-medium text-slate-700 truncate">{tx(prod.seller)}</span>
+                              <span className="font-medium text-slate-700 truncate">{prod.seller}</span>
                             </div>
                             <div className="flex items-center gap-1.5 text-slate-500 truncate">
                               <MapPin className="h-3 w-3 text-emerald-600 shrink-0" />
@@ -914,6 +886,10 @@ const Market = () => {
                             </span>
                           </div>
 
+                          {prod.ownerId === ownerId && <div className="flex gap-2" onClick={event => event.stopPropagation()}>
+                            <Button variant="outline" className="flex-1" onClick={() => openEdit(prod)}>{tx('Edit Product / Restock')}</Button>
+                            <Button variant="destructive" onClick={() => setDeleteTarget(prod)}>{tx('Delete')}</Button>
+                          </div>}
                           {/* Contact Seller or Status Button */}
                           {status === "Available" ? (
                             <Button
@@ -952,6 +928,8 @@ const Market = () => {
               </div>
             )}
 
+            {catalogLoading && <p role="status">{tx('Loading products…')}</p>}
+            {catalogError && <p role="alert" className="text-red-700 p-3">{tx(catalogError)}</p>}
             {/* Pagination Matching Reference Layout */}
             {totalPages > 1 && (
               <div className="pt-6 pb-2 flex items-center justify-center gap-1.5 text-sm">
@@ -1028,7 +1006,7 @@ const Market = () => {
                     <div className="flex items-center justify-between">
                       <div>
                         <span className="text-[11px] text-slate-500 uppercase font-semibold">{tx("Producer")}</span>
-                        <p className="text-sm font-bold text-slate-800">{tx(contactProduct.seller)}</p>
+                        <p className="text-sm font-bold text-slate-800">{contactProduct.seller}</p>
                       </div>
                       <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full">
                         <ShieldCheck className="h-3 w-3" />{tx("Listed Producer")}</span>
@@ -1039,7 +1017,7 @@ const Market = () => {
                         href={`tel:${contactProduct.sellerPhone}`}
                         className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-white border border-emerald-200 text-emerald-800 text-xs font-bold hover:bg-emerald-50 transition-colors shadow-2xs"
                       >
-                        <Phone className="h-3.5 w-3.5" />{tx("Call (")}{tx(contactProduct.sellerPhone)}{tx(")")}</a>
+                        <Phone className="h-3.5 w-3.5" />{tx("Call (")}{contactProduct.sellerPhone}{tx(")")}</a>
                       <a
                         href={`sms:${contactProduct.sellerPhone}?body=Hello ${encodeURIComponent(contactProduct.seller)}, I saw your ${encodeURIComponent(contactProduct.name)} on Kaani Web.`}
                         className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-emerald-800 text-white text-xs font-bold hover:bg-emerald-900 transition-colors shadow-2xs"
@@ -1114,7 +1092,7 @@ const Market = () => {
                             <span className="font-semibold">{tx(formatPeso(comm.platformFee))}</span>
                           </div>
                           <div className="flex justify-between items-center text-emerald-950 font-bold pt-1 border-t border-emerald-200/60">
-                            <span>{tx("Estimated seller share for ")}{tx(contactProduct.seller)}{tx(":")}</span>
+                            <span>{tx("Estimated seller share for ")}{contactProduct.seller}{tx(":")}</span>
                             <span className="text-emerald-900 font-extrabold">{tx(formatPeso(comm.sellerNet))}{tx(" (95%)")}</span>
                           </div>
                         </div>
@@ -1209,7 +1187,7 @@ const Market = () => {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-500 font-medium">{tx("Registered Producer:")}</span>
-                    <span className="font-bold text-emerald-900">{tx(detailProduct.seller)}</span>
+                    <span className="font-bold text-emerald-900">{detailProduct.seller}</span>
                   </div>
                 </div>
 
@@ -1231,7 +1209,7 @@ const Market = () => {
                     }}
                     className="flex-1 bg-[#0d533a] hover:bg-[#093c2a] text-white font-bold rounded-xl py-2.5 text-sm shadow-xs flex items-center justify-center gap-2"
                   >
-                    <MessageCircle className="h-4 w-4" />{tx("Contact ")}{tx(detailProduct.seller)}
+                    <MessageCircle className="h-4 w-4" />{tx("Contact ")}{detailProduct.seller}
                   </Button>
                 ) : (
                   <Button
@@ -1268,29 +1246,34 @@ const Market = () => {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={!!deleteTarget} onOpenChange={(open) => { if (!open && !saving) setDeleteTarget(null); }}>
+        <DialogContent><DialogHeader><DialogTitle>{tx('Delete product?')}</DialogTitle><DialogDescription>{tx('This removes your listing from the marketplace.')} {deleteTarget?.name}</DialogDescription></DialogHeader>
+          <DialogFooter><Button variant="outline" disabled={saving} onClick={() => setDeleteTarget(null)}>{tx('Cancel')}</Button><Button variant="destructive" disabled={saving} onClick={handleDelete}>{tx(saving ? 'Deleting…' : 'Delete')}</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
       {/* SELL PRODUCE MODAL (For farmers & fisherfolk) */}
-      <Dialog open={isSellModalOpen} onOpenChange={setIsSellModalOpen}>
+      <Dialog open={isSellModalOpen} onOpenChange={(open) => { if (!mutationPending.current) setIsSellModalOpen(open); }}>
         <DialogContent className="sm:max-w-lg rounded-3xl p-6 bg-white border border-emerald-100 shadow-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader className="pb-3 border-b border-emerald-100 text-left">
             <DialogTitle className="text-xl font-bold font-heading text-slate-900 flex items-center gap-2">
               <PlusCircle className="h-5 w-5 text-emerald-700" />
-              {tx("Create Product Listing")}
+              {tx(editingProduct ? "Edit Product / Restock" : "Create Product Listing")}
             </DialogTitle>
             <DialogDescription className="text-xs text-slate-500">
               {tx("Promote and sell your agriculture or fisheries products directly to buyers.")}
             </DialogDescription>
           </DialogHeader>
 
-          {sellSuccess ? (
+          {!ownerId ? <div className="py-6 space-y-3"><p>{tx('Sign in to manage your products.')}</p><Button asChild><Link to="/auth">{tx('Sign In')}</Link></Button></div> : sellSuccess ? (
             <div className="py-8 text-center space-y-3 animate-in fade-in zoom-in-95">
               <div className="w-14 h-14 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto">
                 <Check className="h-8 w-8" />
               </div>
-              <h4 className="text-base font-bold text-slate-900">{tx("Listing Saved on This Device")}</h4>
-              <p className="text-xs text-slate-600 max-w-xs mx-auto">{tx("This listing is saved in this browser only. It is not published to other buyers.")}</p>
+              <h4 className="text-base font-bold text-slate-900">{tx("Product saved")}</h4>
+              <p className="text-xs text-slate-600 max-w-xs mx-auto">{tx("Your product is now saved in the marketplace database.")}</p>
             </div>
           ) : (
-            <form onSubmit={handleSellSubmit} className="space-y-3.5 pt-3">
+            <form onSubmit={handleSellSubmit} className="space-y-3.5 pt-3"><fieldset disabled={saving} className="space-y-3.5">
               <div>
                 <label htmlFor="market-field-7" className="text-xs font-bold text-slate-700 block mb-1">{tx("Product Name *")}</label>
                 <input id="market-field-7"
@@ -1335,7 +1318,8 @@ const Market = () => {
                   <label htmlFor="market-field-10" className="text-xs font-bold text-slate-700 block mb-1">{tx("Price (₱) *")}</label>
                   <input id="market-field-10"
                     type="number"
-                    step="0.5"
+                    step="0.01"
+                    min="0.01" max="1000000000"
                     required
                     placeholder={tx("50")}
                     value={newProduct.price}
@@ -1361,12 +1345,13 @@ const Market = () => {
                 <div>
                   <label htmlFor="market-field-12" className="text-xs font-bold text-slate-700 block mb-1">{tx("Stock")}</label>
                   <input id="market-field-12"
+                    min="0" max="1000000000" step="0.001"
                     type="number"
                     required
                     placeholder={tx("50")}
                     value={newProduct.availableStock}
                     onChange={(e) => {
-                      const qty = parseInt(e.target.value) || 0;
+                      const qty = Number(e.target.value);
                       setNewProduct((prev) => ({
                         ...prev,
                         availableStock: qty,
@@ -1417,20 +1402,13 @@ const Market = () => {
 
               <div>
                 <label htmlFor="market-field-16" className="text-xs font-bold text-slate-700 block mb-1">{tx("Location *")}</label>
-                <select id="market-field-16"
-                  value={newProduct.location}
-                  onChange={(e) => setNewProduct({ ...newProduct, location: e.target.value })}
-                  className="w-full text-xs p-2.5 rounded-xl border border-emerald-200 bg-[#f8faf9]"
-                >
-                  {MARKET_LOCATIONS.filter(l => l !== "All Locations").map((loc) => (
-                    <option key={loc} value={loc}>{tx(loc)}</option>
-                  ))}
-                </select>
+                <input id="market-field-16" required maxLength={200} value={newProduct.location} onChange={event => setNewProduct({ ...newProduct, location: event.target.value })} className="w-full text-xs p-2.5 rounded-xl border border-emerald-200 bg-[#f8faf9]" />
               </div>
 
+              <div><label htmlFor="product-description" className="text-xs font-bold block mb-1">{tx('Product Description')}</label><textarea id="product-description" maxLength={3000} value={newProduct.description} onChange={event => setNewProduct({ ...newProduct, description: event.target.value })} className="w-full rounded-xl border border-emerald-200 p-2" /></div>
               {/* Produce Photo Upload & Selection */}
               <div>
-                <label className="text-xs font-bold text-slate-700 block mb-1">{tx("Product Photo *")}</label>
+                <label htmlFor="product-photo" className="text-xs font-bold text-slate-700 block mb-1">{tx("Product Photo *")}</label>
                 <div className="flex items-center gap-3">
                   <div className="relative w-20 h-16 rounded-xl overflow-hidden border border-emerald-200 bg-slate-100 shrink-0">
                     <img 
@@ -1449,13 +1427,13 @@ const Market = () => {
                       <PlusCircle className="h-3.5 w-3.5" />
                       <span>{tx("Upload Photo")}</span>
                       <input 
-                        type="file" 
-                        accept="image/*" 
+                        id="product-photo" type="file" 
+                        accept="image/jpeg,image/png,image/webp" 
                         onChange={handleImageFileChange} 
                         className="hidden" 
                       />
                     </label>
-                    <p className="text-[10px] text-slate-500">{tx("Upload from your phone or camera.")}</p>
+                    <p className="text-[10px] text-slate-500">{tx("Choose a JPG, PNG, or WebP photo up to 5 MB.")}</p>
                   </div>
                 </div>
 
@@ -1518,7 +1496,7 @@ const Market = () => {
                     </button>{tx(". *")}</span>
                 </label>
                 {rulesError && (
-                  <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2 animate-in fade-in">
+                  <div role="alert" className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2 animate-in fade-in">
                     <AlertCircle className="h-4 w-4 shrink-0 text-rose-600" />
                     <span>{tx(rulesError)}</span>
                   </div>
@@ -1529,9 +1507,9 @@ const Market = () => {
                 type="submit"
                 className="w-full bg-[#0d533a] hover:bg-[#093c2a] text-white font-bold rounded-xl py-2.5 text-xs shadow-md transition-all active:scale-98"
               >
-                {tx("Save Listing on This Device")}
+                {tx(saving ? "Saving…" : editingProduct ? "Save Changes" : "Publish Product")}
               </Button>
-            </form>
+            </fieldset></form>
           )}
         </DialogContent>
       </Dialog>
@@ -1577,7 +1555,7 @@ const Market = () => {
                     />
                     <div className="min-w-0 flex-1">
                       <p className="font-bold text-xs text-slate-900 truncate">{tx(reportProduct.name)}</p>
-                      <p className="text-[11px] text-slate-500 truncate">{tx("Seller: ")}{tx(reportProduct.seller)}</p>
+                      <p className="text-[11px] text-slate-500 truncate">{tx("Seller: ")}{reportProduct.seller}</p>
                       <p className="text-[11px] font-semibold text-emerald-800">{tx("₱ ")}{tx(reportProduct.price.toFixed(2))}{tx(" / ")}{tx(reportProduct.unit)}</p>
                     </div>
                   </div>
@@ -1891,7 +1869,7 @@ const Market = () => {
                   </p>
                 </div>
                 <Button
-                  onClick={() => setIsSellModalOpen(true)}
+                  onClick={openCreate}
                   className="bg-white text-emerald-950 hover:bg-emerald-50 text-xs font-bold rounded-xl px-4 py-2 shrink-0 shadow-xs"
                 >
                   <PlusCircle className="h-3.5 w-3.5 mr-1" />

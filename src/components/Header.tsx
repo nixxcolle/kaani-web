@@ -17,6 +17,7 @@ import {
   Languages
 } from "@/components/icons";
 import { Button } from "@/components/ui/button";
+import LanguageSelector from "./LanguageSelector";
 import { useLanguage } from "@/lib/language-context";
 import { logout, getCurrentUser } from "@/lib/auth";
 
@@ -29,7 +30,7 @@ interface UserProfile {
 
 const Header = () => {
   const tx = useText();
-  const { language, setLanguage, toggleLanguage, t } = useLanguage();
+  const { t } = useLanguage();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -92,39 +93,12 @@ const Header = () => {
           className="flex items-center gap-3 group focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600 rounded-xl"
           aria-label={tx("Kaani Web Home")}
         >
-          {/* Logo badge with leaf and aquatic waves */}
-          <div className="relative flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-600 via-emerald-700 to-teal-800 text-white shadow-md shadow-emerald-900/10 ring-1 ring-emerald-500/20 group-hover:scale-105 group-hover:shadow-emerald-900/20 transition-all duration-300">
-            <svg viewBox="0 0 32 32" className="w-7 h-7 drop-shadow-xs" fill="none" xmlns="http://www.w3.org/2000/svg">
-              {/* Vibrant farm leaf */}
-              <path 
-                d="M7 21C7 13.5 13.5 6 25 7C25 18 18 25 10 25C8.3 25 7 23.7 7 21Z" 
-                fill="#34d399" 
-              />
-              <path 
-                d="M10 23C13 19 17 14 24 9" 
-                stroke="#064e3b" 
-                strokeWidth="1.6" 
-                strokeLinecap="round" 
-              />
-              {/* Oceanic waves representing fisheries */}
-              <path 
-                d="M4 25.5C7.5 23.5 10.5 26.5 14 24.5C17.5 22.5 20.5 25.5 24 23.5C27 21.8 29.5 24 31 23" 
-                stroke="#38bdf8" 
-                strokeWidth="2.2" 
-                strokeLinecap="round" 
-              />
-              <path 
-                d="M6 28.5C9 26.5 12 28.8 15 27C18 25.2 21 28 24 26.5" 
-                stroke="#0284c7" 
-                strokeWidth="2" 
-                strokeLinecap="round" 
-              />
-            </svg>
-          </div>
+          {/* Shared brand image */}
+          <img src={`${import.meta.env.BASE_URL}assets/images/newlogo.png`} alt="" width={200} height={179} className="h-11 w-11 shrink-0 object-contain rounded-xl bg-white p-0.5" />
           <div className="flex flex-col">
-            <span className="text-xl font-extrabold tracking-tight text-emerald-900 uppercase font-heading leading-tight group-hover:text-emerald-700 transition-colors">{tx("Kaani ")}<span className="text-emerald-600 font-black">{tx("Web")}</span>
+            <span className="text-base sm:text-xl font-extrabold tracking-tight text-emerald-900 uppercase font-heading leading-tight group-hover:text-emerald-700 transition-colors">{tx("Kaani ")}<span className="text-emerald-600 font-black">{tx("Web")}</span>
             </span>
-            <span className="text-[11px] font-semibold tracking-wider text-emerald-800/80 leading-none">{tx("Learn • Sell • Grow • Innovate")}</span>
+            <span className="hidden sm:block text-[11px] font-semibold tracking-wider text-emerald-800/80 leading-none">{tx("Learn • Sell • Grow • Innovate")}</span>
           </div>
         </Link>
 
@@ -185,18 +159,7 @@ const Header = () => {
             )}
           </div>
 
-          {/* Language Switcher (EN | FIL) */}
-          <button
-            onClick={toggleLanguage}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-emerald-200/90 bg-emerald-50/60 hover:bg-emerald-100/70 text-sm font-bold text-emerald-950 transition-all shadow-2xs active:scale-95"
-            title={tx(language === "en" ? "Isalin sa Filipino" : "Switch to English")}
-            aria-label={tx("Toggle language between English and Filipino")}
-          >
-            <Languages className="h-3.5 w-3.5 text-emerald-700 shrink-0" />
-            <span className={language === "en" ? "text-emerald-900 font-extrabold" : "text-slate-400 font-normal"}>{tx("EN")}</span>
-            <span className="text-slate-300">{tx("/")}</span>
-            <span className={language === "fil" ? "text-emerald-900 font-extrabold" : "text-slate-400 font-normal"}>{tx("FIL")}</span>
-          </button>
+          <LanguageSelector />
 
           {/* Auth Actions (Login & Register) */}
           <div className="flex items-center space-x-2 pl-2 border-l border-emerald-100 ml-1">
@@ -226,7 +189,7 @@ const Header = () => {
                   {tx(t("nav.login", "Login"))}
                 </Link>
                 <Link
-                  to="/role-selection"
+                  to="/auth?mode=signup"
                   className="px-4 py-1.5 text-sm font-bold text-white bg-emerald-800 hover:bg-emerald-900 shadow-xs hover:shadow-md rounded-xl transition-all active:scale-95"
                 >
                   {tx(t("nav.register", "Register"))}
@@ -238,15 +201,7 @@ const Header = () => {
 
         {/* Mobile menu trigger */}
         <div className="flex items-center gap-2 xl:hidden">
-          <button
-            onClick={toggleLanguage}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-emerald-200 bg-emerald-50 text-xs font-bold text-emerald-950 shadow-2xs"
-            title={tx("Toggle Language")}
-            aria-label={tx("Language switch")}
-          >
-            <Languages className="h-3.5 w-3.5 text-emerald-700" />
-            <span>{tx(language.toUpperCase())}</span>
-          </button>
+          <LanguageSelector compact />
           <button
             onClick={() => setIsMenuOpen(!isMenuOpen)}
               aria-expanded={isMenuOpen}
@@ -309,25 +264,7 @@ const Header = () => {
             })}
           </nav>
 
-          {/* Language Switcher Row in Mobile Menu */}
-          <div className="flex items-center justify-between p-3 rounded-2xl bg-emerald-50/80 border border-emerald-200/80">
-            <span className="text-xs font-bold text-emerald-950 flex items-center gap-2">
-              <Languages className="h-4 w-4 text-emerald-700" />{tx("Wika / Language")}</span>
-            <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-emerald-200 text-xs font-bold shadow-2xs">
-              <button
-                type="button"
-                onClick={() => setLanguage("en")}
-                aria-pressed={language === "en"}
-                className={`px-3 py-1 rounded-lg transition-colors ${language === "en" ? "bg-emerald-800 text-white font-extrabold shadow-2xs" : "text-slate-600 hover:text-emerald-900"}`}
-              >{tx("English")}</button>
-              <button
-                type="button"
-                onClick={() => setLanguage("fil")}
-                aria-pressed={language === "fil"}
-                className={`px-3 py-1 rounded-lg transition-colors ${language === "fil" ? "bg-emerald-800 text-white font-extrabold shadow-2xs" : "text-slate-600 hover:text-emerald-900"}`}
-              >{tx("Filipino")}</button>
-            </div>
-          </div>
+          <div className="flex justify-center"><LanguageSelector /></div>
 
           {/* Mobile Auth and Action Section */}
           <div className="pt-4 border-t border-emerald-100">
@@ -368,7 +305,7 @@ const Header = () => {
                   asChild
                   onClick={() => setIsMenuOpen(false)}
                 >
-                  <Link to="/role-selection">{tx("Register")}</Link>
+                  <Link to="/auth?mode=signup">{tx("Register")}</Link>
                 </Button>
               </div>
             )}

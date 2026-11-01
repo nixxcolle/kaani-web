@@ -15,11 +15,10 @@ import { authErrorMessage } from "@/lib/auth-errors";
 
 const Auth = () => {
   const tx = useText();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
-  const profileParam = searchParams.get('profile') || '';
 
-  const [isLogin, setIsLogin] = useState(true);
+  const [isLogin, setIsLogin] = useState(searchParams.get('mode') !== 'signup');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -53,9 +52,13 @@ const Auth = () => {
   const [formData, setFormData] = useState({
     email: '',
     password: '',
-    name: profileParam ? `Learner (${profileParam})` : '',
+    name: '',
     confirmPassword: ''
   });
+
+  useEffect(() => {
+    setIsLogin(searchParams.get('mode') !== 'signup');
+  }, [searchParams]);
 
   useEffect(() => {
     const callback = new URLSearchParams(window.location.hash.slice(1));
@@ -121,11 +124,12 @@ const Auth = () => {
 
       const result = isLogin
         ? await login({ email: formData.email, password: formData.password })
-        : await signUp({ email: formData.email, password: formData.password, name: formData.name || formData.email.split('@')[0], role: 'user' });
+        : await signUp({ email: formData.email, password: formData.password, name: formData.name });
       pauseRetries(result.retryAfterSeconds, result.retryScope);
       if (result.confirmationRequired) {
         setCanResend(true);
         setIsLogin(true);
+        setSearchParams({ mode: 'login' }, { replace: true });
         if (result.success) {
           setNotice('Check your email to confirm your account, then sign in. Check your spam folder if the email is missing.');
           setFormData(previous => ({ ...previous, password: '', confirmPassword: '' }));
@@ -154,11 +158,11 @@ const Auth = () => {
         <div className="max-w-lg mx-auto space-y-6">
           
           <Link 
-            to="/role-selection" 
+            to="/" 
             className="inline-flex items-center gap-1.5 text-xs md:text-sm font-semibold text-muted-foreground hover:text-kaani-primary transition-colors"
           >
             <ArrowLeft className="h-4 w-4" />
-            <span>{tx("Back to Roles")}</span>
+            <span>{tx("Return to Homepage")}</span>
           </Link>
 
           <Card className="rounded-3xl shadow-elevated border border-emerald-100 bg-white overflow-hidden">
@@ -181,6 +185,7 @@ const Auth = () => {
                 value={isLogin ? 'login' : 'signup'} 
                 onValueChange={(val) => {
                   setIsLogin(val === 'login');
+                  setSearchParams({ mode: val }, { replace: true });
                   setError(null);
                   setNotice(null);
                   setCanResend(false);
@@ -213,12 +218,14 @@ const Auth = () => {
               <form onSubmit={handleSubmit} className="space-y-4">
                 {!isLogin && (
                   <div className="space-y-1.5">
-                    <Label htmlFor="name" className="text-xs font-bold text-slate-700">{tx("Full Name / Nickname")}</Label>
+                    <Label htmlFor="name" className="text-xs font-bold text-slate-700">{tx("Full Name")}</Label>
                     <div className="relative">
                       <User className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                       <Input
                         id="name"
                         name="name"
+                        autoComplete="name"
+                        maxLength={120}
                         placeholder={tx("e.g. Maria Santos")}
                         value={formData.name}
                         onChange={handleInputChange}

@@ -4,14 +4,13 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import AnimatedBackground from "@/components/AnimatedBackground";
 import { LanguageProvider } from "@/lib/i18n";
 import Index from "./pages/Index";
 const Learning = lazy(() => import("./pages/Learning"));
 const Quiz = lazy(() => import("./pages/Quiz"));
 const ModuleSelection = lazy(() => import("./pages/ModuleSelection"));
-const RoleSelection = lazy(() => import("./pages/RoleSelection"));
 const Auth = lazy(() => import("./pages/Auth"));
 const Sustainability = lazy(() => import("./pages/Sustainability"));
 const Legal = lazy(() => import("./pages/Legal"));
@@ -44,7 +43,7 @@ const App = () => (
             <Route path="/learning" element={<Learning />} />
             <Route path="/quiz" element={<Quiz />} />
             <Route path="/modules" element={<ModuleSelection />} />
-            <Route path="/role-selection" element={<RoleSelection />} />
+            <Route path="/role-selection" element={<Navigate to="/auth?mode=signup" replace />} />
             <Route path="/auth" element={<Auth />} />
             <Route path="/sustainability" element={<Sustainability />} />
             <Route path="/legal" element={<Legal />} />

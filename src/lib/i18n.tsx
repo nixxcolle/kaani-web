@@ -1,65 +1,27 @@
-import React, { useState, useEffect } from "react";
-import { LanguageContext, type Language } from "./language-context";
-import { TRANSLATIONS } from "./i18n-data";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { LanguageContext } from "./language-context";
+import { LANGUAGES, savedLanguage, isLanguage, type Language } from './locales';
+import { TRANSLATIONS } from './i18n-data';
+import { translateText } from './translation-catalogs';
+
 export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [language, setLanguageState] = useState<Language>(() => {
-    try {
-      const saved = localStorage.getItem("kaani_lang");
-      return saved === "fil" ? "fil" : "en";
-    } catch {
-      return "en";
-    }
+    try { return savedLanguage(localStorage.getItem('kaani_lang')); } catch { return 'en'; }
   });
-
-  const setLanguage = (lang: Language) => {
+  const setLanguage = useCallback((lang: Language) => {
+    if (!isLanguage(lang)) return;
     setLanguageState(lang);
-    try {
-      localStorage.setItem("kaani_lang", lang);
-      window.dispatchEvent(new CustomEvent("language-change", { detail: lang }));
-    } catch (e) {
-      console.warn("Failed to persist language choice", e);
-    }
-  };
-
-  const toggleLanguage = () => {
-    setLanguage(language === "en" ? "fil" : "en");
-  };
-
+    try { localStorage.setItem('kaani_lang', lang); } catch { /* In-memory switching still works when storage is blocked. */ }
+    window.dispatchEvent(new CustomEvent('language-change', { detail: lang }));
+  }, []);
+  useEffect(() => { document.documentElement.lang = LANGUAGES[language].htmlLang; }, [language]);
   useEffect(() => {
-    try { localStorage.removeItem('kaani_local_registered_users'); } catch { /* Storage may be disabled. */ }
-    document.documentElement.lang = language === "fil" ? "fil" : "en";
-    const handleStorage = (e: StorageEvent) => {
-      if (e.key === "kaani_lang" && (e.newValue === "en" || e.newValue === "fil")) {
-        setLanguageState(e.newValue);
-      }
-    };
-    window.addEventListener("storage", handleStorage);
-    return () => window.removeEventListener("storage", handleStorage);
-  }, [language]);
-
-  const t = (key: string, defaultText?: string): string => {
-    const table = TRANSLATIONS[language];
-    if (table && table[key]) {
-      return table[key];
-    }
-    // Fallback to English
-    if (TRANSLATIONS.en[key]) {
-      return TRANSLATIONS.en[key];
-    }
-    return defaultText || key;
-  };
-
-  return (
-    <LanguageContext.Provider
-      value={{
-        language,
-        setLanguage,
-        toggleLanguage,
-        t,
-        isFilipino: language === "fil",
-      }}
-    >
-      {children}
-    </LanguageContext.Provider>
-  );
+    try { localStorage.removeItem('kaani_local_registered_users'); } catch { /* Optional legacy cache. */ }
+    const sync = (event: StorageEvent) => { if (event.key === 'kaani_lang') setLanguageState(savedLanguage(event.newValue)); };
+    window.addEventListener('storage', sync);
+    return () => window.removeEventListener('storage', sync);
+  }, []);
+  const t = useCallback((key: string, fallback?: string) => TRANSLATIONS[language][key] || translateText(TRANSLATIONS.en[key] || fallback || key, language), [language]);
+  const value = useMemo(() => ({ language, setLanguage, t }), [language, setLanguage, t]);
+  return <LanguageContext.Provider value={value}>{children}</LanguageContext.Provider>;
 };

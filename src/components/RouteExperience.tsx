@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { useLanguage } from '@/lib/language-context';
 import { useText } from '@/lib/translate';
 
-const titles: Record<string, string> = { '/': 'Home', '/market': 'Kaani Market', '/learning': 'Learning Hub', '/modules': 'Learning Modules', '/quiz': 'Knowledge Quiz', '/auth': 'Sign In', '/role-selection': 'Choose How You Want to Learn', '/sustainability': 'Sustainability', '/legal': 'Legal Information', '/terms': 'Terms & Conditions' };
+const titles: Record<string, string> = { '/': 'Home', '/market': 'Kaani Market', '/learning': 'Learning Hub', '/modules': 'Learning Modules', '/quiz': 'Knowledge Quiz', '/auth': 'Sign In', '/sustainability': 'Sustainability', '/legal': 'Legal Information', '/terms': 'Terms & Conditions' };
 export default function RouteExperience() {
   const { pathname } = useLocation();
   const { language } = useLanguage();

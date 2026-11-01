@@ -30,13 +30,12 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { fetchLearningModules } from "@/lib/modules";
 import { LearningModule } from "@/lib/data";
 import { useToast } from "@/hooks/use-toast";
-import { useLanguage } from "@/lib/language-context";
+import LanguageSelector from "@/components/LanguageSelector";
 
 const ModuleSelection = () => {
   const tx = useText();
   const [searchParams] = useSearchParams();
   const { toast } = useToast();
-  const { language, toggleLanguage, isFilipino, t } = useLanguage();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
@@ -294,15 +293,7 @@ const ModuleSelection = () => {
                     </Badge>}
                     {activeModule.readTimeMinutes && <span className="text-xs text-muted-foreground flex items-center gap-1">
                       <Clock className="h-3 w-3" /> {tx(activeModule.readTimeMinutes)}{tx(" min read")}</span>}
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={toggleLanguage}
-                      className="h-7 text-xs rounded-lg border-emerald-300 bg-white hover:bg-emerald-50 text-emerald-900 font-bold ml-1 flex items-center gap-1 shadow-2xs"
-                    >
-                      <Languages className="h-3.5 w-3.5 text-emerald-700" />
-                      <span>{isFilipino ? "Switch to English" : "Isalin sa Filipino"}</span>
-                    </Button>
+                    <LanguageSelector />
                   </div>
                   <DialogTitle className="text-2xl md:text-3xl font-extrabold font-heading text-slate-900">
                     {tx(activeModule.title)}

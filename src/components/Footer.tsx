@@ -28,14 +28,7 @@ const Footer = () => {
           {/* Brand Column */}
           <div className="space-y-4 lg:col-span-2">
             <Link to="/" className="flex items-center gap-3 group inline-flex">
-              <div className="relative flex h-10 w-10 items-center justify-center rounded-2xl bg-white/10 ring-1 ring-white/20 text-white shadow-sm">
-                <svg viewBox="0 0 32 32" className="w-6 h-6" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M7 21C7 13.5 13.5 6 25 7C25 18 18 25 10 25C8.3 25 7 23.7 7 21Z" fill="#34d399" />
-                  <path d="M10 23C13 19 17 14 24 9" stroke="#064e3b" strokeWidth="1.6" strokeLinecap="round" />
-                  <path d="M4 25.5C7.5 23.5 10.5 26.5 14 24.5C17.5 22.5 20.5 25.5 24 23.5C27 21.8 29.5 24 31 23" stroke="#38bdf8" strokeWidth="2.2" strokeLinecap="round" />
-                  <path d="M6 28.5C9 26.5 12 28.8 15 27C18 25.2 21 28 24 26.5" stroke="#0284c7" strokeWidth="2" strokeLinecap="round" />
-                </svg>
-              </div>
+              <img src={`${import.meta.env.BASE_URL}assets/images/newlogo.png`} alt="" width={200} height={179} className="h-11 w-11 shrink-0 object-contain rounded-xl bg-white p-0.5" />
               <div className="flex flex-col">
                 <span className="text-xl font-black uppercase tracking-wider text-white font-heading">{tx("Kaani ")}<span className="text-emerald-400">{tx("Web")}</span>
                 </span>

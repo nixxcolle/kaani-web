@@ -70,7 +70,7 @@ test('invalid or offline login fails without creating a user or querying passwor
 
 test('signup requiring email confirmation does not authenticate a user', async () => {
   const auth = load('src/lib/auth.ts', { './supabase': { supabase: { auth: { signUp: async () => ({ data: { user: { id: 'pending' }, session: null }, error: null }) } } } });
-  const result = await auth.signUp({ name: 'Test', email: 'test@example.com', password: 'password', role: 'user' });
+  const result = await auth.signUp({ name: 'Test', email: 'test@example.com', password: 'password' });
   assert.equal(result.confirmationRequired, true); assert.equal(result.user, undefined);
 });
 
@@ -98,12 +98,12 @@ test('a response without an authenticated session cannot log a user in', async (
   assert.equal((await auth.login({ email: 'test@example.com', password: 'password' })).success, false);
 });
 
-test('signup uses the app callback URL and default member role', async () => {
+test('signup uses the app callback URL without role metadata', async () => {
   let request;
   const auth = load('src/lib/auth.ts', { './supabase': { authRedirectUrl: 'https://example.com/Kaani-web/auth', supabase: { auth: { signUp: async value => { request = value; return { data: { user: { id: 'pending' }, session: null }, error: null }; } } } } });
-  await auth.signUp({ email: ' TEST@example.com ', password: 'password', name: ' Member ', role: 'user' });
+  await auth.signUp({ email: ' TEST@example.com ', password: 'password', name: ' Member ' });
   assert.equal(request.options.emailRedirectTo, 'https://example.com/Kaani-web/auth');
-  assert.deepEqual(request.options.data, { name: 'Member', role: 'user' });
+  assert.deepEqual(request.options.data, { name: 'Member' });
 });
 
 test('resending confirmation uses the registered email and correct callback', async () => {
@@ -221,7 +221,7 @@ test('module permission and network errors propagate instead of pretending to lo
 test('registration with confirmation disabled authenticates immediately from the returned server session', async () => {
   const user = { id: 'new-member', email: 'test@example.com', created_at: '2026-10-29', user_metadata: { name: 'Member' } };
   const auth = load('src/lib/auth.ts', { './supabase': { supabase: { auth: { signUp: async () => ({ data: { user, session: { user } }, error: null }) } } } });
-  const result = await auth.signUp({ email: user.email, password: 'test-password', name: 'Member', role: 'user' });
+  const result = await auth.signUp({ email: user.email, password: 'test-password', name: 'Member' });
   assert.equal(result.success, true);
   assert.equal(result.confirmationRequired, undefined);
   assert.equal(result.user.id, user.id);
@@ -241,4 +241,173 @@ test('public module catalog never loads a cached member session', async () => {
   assert.equal(await module.exports.moduleCatalog.options.accessToken(), null);
   assert.equal(module.exports.supabase.options.auth.persistSession, true);
   assert.equal(calls.length, 2);
+});
+
+const validProduct = { name: 'Tomatoes', category: 'Vegetables & Fruits', type: 'Farm Product', price: 25.50, unit: 'kg', availableStock: 10, status: 'Available', seller: 'Test Seller', sellerPhone: '+63 917 000 0000', location: 'Samar', description: 'Fresh' };
+const productRow = { id: 'product-id', owner_id: 'owner-id', name: 'Tomatoes', category: 'Vegetables & Fruits', type: 'Farm Product', price: '25.50', unit: 'kg', stock: '10', status: 'Available', seller_name: 'Test Seller', seller_phone: '+63 917 000 0000', location: 'Samar', description: 'Fresh', photo_path: 'owner-id/product-id/old.jpg', photo_url: 'https://example.com/old.jpg', created_at: '2026-11-01', updated_at: 'version-1' };
+function productHarness() {
+  const state = { user: { id: 'owner-id' }, row: { ...productRow }, dbError: null, uploadError: null, cleanupError: null, values: null, filters: [], uploaded: [], removed: [], action: '' };
+  const storage = { upload: async (name, file) => { state.uploaded.push({ name, file }); return { error: state.uploadError }; }, getPublicUrl: name => ({ data: { publicUrl: 'https://example.com/' + name } }), remove: async names => { state.removed.push(...names); return { error: state.cleanupError }; } };
+  const builder = { insert(values) { state.action = 'insert'; state.values = values; return this; }, update(values) { state.action = 'update'; state.values = values; return this; }, delete() { state.action = 'delete'; return this; }, eq(key, value) { state.filters.push([key, value]); return this; }, select() { return this; }, async single() { return { data: state.dbError ? null : { ...state.row, ...state.values }, error: state.dbError }; } };
+  const supabase = { auth: { getUser: async () => ({ data: { user: state.user }, error: null }) }, storage: { from: bucket => { assert.equal(bucket, 'product-photos'); return storage; } }, from: table => { assert.equal(table, 'marketplace_products'); return builder; } };
+  const service = load('src/lib/products.ts', { './supabase': { supabase } });
+  const original = { ...validProduct, id: 'product-id', ownerId: 'owner-id', updatedAt: 'version-1', image: productRow.photo_url, photoPath: productRow.photo_path };
+  return { state, service, original };
+}
+const productPhoto = () => new File([new Uint8Array([255,216,255,224,0,0,0,0,0,0,0,0])], 'photo.jpg', { type: 'image/jpeg' });
+
+test('product validation rejects invalid seller details, amounts, quantities and photos', () => {
+  const { service } = productHarness();
+  service.validateProduct(validProduct);
+  for (const patch of [{ name: ' ' }, { sellerPhone: 'invalid' }, { price: NaN }, { price: -1 }, { price: 1.005 }, { availableStock: -1 }, { availableStock: Infinity }, { category: 'invalid' }, { status: 'invalid' }]) assert.throws(() => service.validateProduct({ ...validProduct, ...patch }));
+  assert.throws(() => service.validatePhoto(new File(['svg'], 'evil.svg', { type: 'image/svg+xml' })));
+  assert.throws(() => service.validatePhoto({ type: 'image/png', size: 5242881 }));
+});
+
+test('only authenticated owners can update or delete products', async () => {
+  const { state, service, original } = productHarness();
+  state.user = null;
+  await assert.rejects(service.saveProduct(validProduct, productPhoto()), /Sign in/);
+  state.user = { id: 'different-owner' };
+  await assert.rejects(service.saveProduct(validProduct, null, original), /own products/);
+  await assert.rejects(service.deleteProduct(original), /own products/);
+  assert.equal(state.action, ''); assert.equal(state.uploaded.length, 0);
+});
+
+test('product creation uploads a file, saves generated URL and owner, and normalizes zero stock', async () => {
+  const { state, service } = productHarness();
+  const { product } = await service.saveProduct({ ...validProduct, availableStock: 0 }, productPhoto());
+  assert.equal(state.action, 'insert'); assert.equal(state.values.owner_id, 'owner-id');
+  assert.equal(state.values.status, 'Out of Stock');
+  assert.ok(state.values.photo_path.startsWith('owner-id/' + state.values.id + '/'));
+  assert.equal(state.values.photo_url, 'https://example.com/' + state.values.photo_path);
+  assert.equal(product.image, state.values.photo_url);
+  assert.equal(state.removed.length, 0);
+});
+
+test('failed upload or invalid photo content never creates a product', async () => {
+  const { state, service } = productHarness();
+  await assert.rejects(service.saveProduct(validProduct, new File(['not an image'], 'bad.jpg', { type: 'image/jpeg' })), /not a valid/);
+  state.uploadError = { message: 'denied' };
+  await assert.rejects(service.saveProduct(validProduct, productPhoto()), /upload failed/);
+  assert.equal(state.action, '');
+});
+
+test('restocking guards the owner and version, preserves photo, and rejects stale edits', async () => {
+  const { state, service, original } = productHarness();
+  await service.saveProduct({ ...validProduct, availableStock: 42.5, status: 'Unavailable' }, null, original);
+  assert.equal(state.values.stock, 42.5); assert.equal(state.values.status, 'Unavailable');
+  assert.equal(state.values.photo_path, original.photoPath);
+  assert.deepEqual(state.filters, [['id','product-id'], ['owner_id','owner-id'], ['updated_at','version-1']]);
+  state.dbError = { code: 'PGRST116' };
+  await assert.rejects(service.saveProduct(validProduct, null, original), /changed or was deleted/);
+});
+
+test('photo replacement cleans the old photo only after confirmed database success', async () => {
+  const { state, service, original } = productHarness();
+  await service.saveProduct(validProduct, productPhoto(), original);
+  assert.deepEqual(state.removed, [original.photoPath]);
+  state.removed = []; state.dbError = { code: '42501' };
+  await assert.rejects(service.saveProduct(validProduct, productPhoto(), original), /could not be saved/);
+  assert.equal(state.removed.length, 1); assert.notEqual(state.removed[0], original.photoPath);
+  state.removed = []; state.dbError = { message: 'Failed to fetch' };
+  await assert.rejects(service.saveProduct(validProduct, productPhoto(), original), /could not be saved/);
+  assert.deepEqual(state.removed, []);
+});
+
+test('deletion checks the saved version before deleting the photo and reports cleanup failures', async () => {
+  const { state, service, original } = productHarness();
+  state.dbError = { code: '42501' };
+  await assert.rejects(service.deleteProduct(original), /could not be deleted/);
+  assert.deepEqual(state.removed, []);
+  state.dbError = null; state.cleanupError = { message: 'offline' };
+  const result = await service.deleteProduct(original);
+  assert.match(result.warning, /photo could not be removed/);
+  assert.deepEqual(state.filters.slice(-3), [['id','product-id'], ['owner_id','owner-id'], ['updated_at','version-1']]);
+});
+
+test('product catalog reads every database page without demo listings', async () => {
+  let rows = [productRow, { ...productRow, id: 'second' }];
+  const builder = { select() { return this; }, order() { return this; }, async range(start) { return { data: rows.slice(start, start + 1), error: null, count: rows.length }; } };
+  const service = load('src/lib/products.ts', { './supabase': { moduleCatalog: { from: () => builder } } });
+  assert.deepEqual((await service.fetchProducts()).map(product => product.id), ['product-id', 'second']);
+  rows = []; assert.deepEqual(await service.fetchProducts(), []);
+  builder.range = async () => ({ data: null, error: { code: '42501' }, count: null });
+  await assert.rejects(service.fetchProducts(), /could not be loaded/);
+});
+
+
+test('registration requires a real name and ignores legacy role properties', async () => {
+  let request;
+  const auth = load('src/lib/auth.ts', { './supabase': { supabase: { auth: { signUp: async value => { request = value; return { data: { user: { id: 'pending' }, session: null }, error: null }; } } } } });
+  assert.equal((await auth.signUp({ name: ' ', email: 'test@example.com', password: 'password' })).success, false);
+  assert.equal(request, undefined);
+  await auth.signUp({ name: 'Member', email: 'test@example.com', password: 'password', role: 'admin' });
+  assert.deepEqual(request.options.data, { name: 'Member' });
+  assert.equal(auth.createGuestSession().role, undefined);
+});
+
+test('registration opens directly with only name, email and password fields and ignores old profile URLs', () => {
+  const React = require('react');
+  const { renderToStaticMarkup } = require('react-dom/server');
+  const { StaticRouter } = require('react-router-dom/server');
+  const wrapper = ({ children }) => React.createElement('div', null, children);
+  const native = tag => props => React.createElement(tag, props);
+  const mocks = {
+    '@/lib/translate': { useText: () => text => text },
+    '@/components/icons': new Proxy({}, { get: () => () => null }),
+    '@/components/ui/button': { Button: ({ children }) => React.createElement('button', null, children) },
+    '@/components/ui/input': { Input: native('input') },
+    '@/components/ui/label': { Label: native('label') },
+    '@/components/ui/card': { Card: wrapper, CardContent: wrapper, CardDescription: wrapper, CardHeader: wrapper, CardTitle: wrapper },
+    '@/components/ui/tabs': { Tabs: wrapper, TabsContent: wrapper, TabsList: wrapper, TabsTrigger: wrapper },
+    '@/components/Header': { default: () => null }, '@/components/Footer': { default: () => null },
+    '@/lib/auth': {}, '@/lib/supabase': {}, '@/lib/auth-errors': {},
+  };
+  const source = fs.readFileSync('src/pages/Auth.tsx', 'utf8');
+  const output = ts.transpileModule(source, { fileName: 'Auth.tsx', compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+  const module = { exports: {} };
+  new Function('require', 'module', 'exports', output)(name => mocks[name] || require(name), module, module.exports);
+  const html = renderToStaticMarkup(React.createElement(StaticRouter, { location: '/auth?mode=signup&role=farmer&profile=Farmer' }, React.createElement(module.exports.default)));
+  assert.match(html, /Create Free Account/);
+  assert.deepEqual([...html.matchAll(/<input[^>]* name="([^"]+)"/g)].map(match => match[1]), ['name', 'email', 'password', 'confirmPassword']);
+  assert.doesNotMatch(html, /<select|type="radio"|Learner \(Farmer\)|Back to Roles/);
+  assert.match(html, /name="name"[^>]*value=""/);
+});
+
+test('Tagalog and Waray catalogs cover every editorial entry and keyed fallback', () => {
+  const { filipino } = load('src/lib/translations.ts');
+  const { waray } = load('src/lib/waray.ts');
+  const { TRANSLATIONS } = load('src/lib/i18n-data.ts');
+  assert.deepEqual(Object.keys(waray).sort(), Object.keys(filipino).sort());
+  assert.ok(Object.keys(waray).length > 890);
+  for (const text of Object.values(TRANSLATIONS.en)) {
+    assert.ok(filipino[text], 'Missing Tagalog: ' + text);
+    assert.ok(waray[text], 'Missing Waray: ' + text);
+  }
+  assert.ok(Object.values(waray).every(text => typeof text === 'string' && text.trim()));
+});
+
+test('language preference accepts all locales, preserves old Filipino settings, and rejects invalid values', () => {
+  const { LANGUAGES, savedLanguage, isLanguage } = load('src/lib/locales.ts');
+  for (const code of ['en', 'fil', 'war']) { assert.equal(isLanguage(code), true); assert.equal(savedLanguage(code), code); }
+  assert.equal(savedLanguage('tl'), 'fil');
+  for (const value of [null, '', '__proto__', 'fr', {}, 5]) { assert.equal(isLanguage(value), false); assert.equal(savedLanguage(value), 'en'); }
+  assert.equal(LANGUAGES.fil.label, 'Tagalog'); assert.equal(LANGUAGES.war.htmlLang, 'war');
+});
+
+test('three-language translation works across navigation, modules, forms, errors and notifications', () => {
+  const { translateText } = load('src/lib/translation-catalogs.ts');
+  const samples = ['Home', 'Full Name', 'Product saved', 'Edit Product / Restock', 'Unit 1: INTRODUCTION TO FISH PHYSIOLOGY', 'Invalid email or password. Check your details and try again.', 'TRIAL MODULE', 'dont click this is for trial only'];
+  for (const source of samples) {
+    const war = translateText(source, 'war'); const fil = translateText(source, 'fil');
+    assert.notEqual(war, source); assert.notEqual(fil, source);
+    assert.equal(translateText(war, 'fil'), fil);
+    assert.equal(translateText(fil, 'war'), war);
+    assert.equal(translateText(war, 'en'), source);
+  }
+  assert.equal(translateText('  Product saved ', 'war'), '  Natipigan an produkto ');
+  assert.equal(translateText('A custom farm name', 'war'), 'A custom farm name');
+  assert.equal(translateText('ambot', 'en'), "I don't know");
+  assert.equal(translateText('ambot', 'fil'), 'Hindi ko alam');
 });

@@ -130,8 +130,8 @@ const Quiz = () => {
     setShowExplanation(true);
     setStreak(0);
     toast({
-      title: tx("Time's Up!"),
-      description: tx("Let's review the correct answer and move on."),
+      title: "Time's Up!",
+      description: "Let's review the correct answer and move on.",
       variant: "destructive"
     });
   };

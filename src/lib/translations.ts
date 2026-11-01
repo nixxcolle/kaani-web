@@ -23,7 +23,7 @@ Sign In|Mag-sign in
 Create Account|Gumawa ng account
 Full Name / Nickname|Buong pangalan / Palayaw
 e.g. Maria Santos|hal. Maria Santos
-Email Address|Email address
+Email Address|Adres ng Email
 Password|Password
 Confirm Password|Ulitin ang password
 Processing...|Pinoproseso...
@@ -832,6 +832,69 @@ Retry|Subukang muli
 INTRODUCTION TO FISH DESIGN|PANIMULA SA DISENYO NG ISDA
 HELLOW THIS IS FOR TRIAL ONLY|KUMUSTA, PARA SA PAGSUBOK LAMANG ITO
 Database modules could not be loaded. Check your connection or ask the administrator to check module read permissions.|Hindi ma-load ang mga modyul mula sa database. Suriin ang iyong koneksiyon o ipasuri sa tagapangasiwa ang pahintulot sa pagbasa ng mga modyul.
+Sign in to manage your products.|Mag-sign in upang pamahalaan ang iyong mga produkto.
+Edit Product / Restock|I-edit ang Produkto / Dagdagan ang Stock
+My Products|Mga Produkto Ko
+Show All Products|Ipakita ang Lahat ng Produkto
+Refresh Products|I-refresh ang mga Produkto
+Loading products…|Nilo-load ang mga produkto…
+Product saved|Na-save ang produkto
+Your product is now saved in the marketplace database.|Na-save na ang iyong produkto sa database ng pamilihan.
+Product deleted|Nabura ang produkto
+Delete failed|Hindi nabura
+Delete product?|Burahin ang produkto?
+This removes your listing from the marketplace.|Aalisin nito ang iyong produkto sa pamilihan.
+Delete|Burahin
+Deleting…|Binubura…
+Saving…|Sine-save…
+Save Changes|I-save ang mga Pagbabago
+Publish Product|I-publish ang Produkto
+Products could not be loaded. Check your connection and marketplace database setup.|Hindi ma-load ang mga produkto. Suriin ang koneksiyon at ang database ng pamilihan.
+The product response was incomplete. Please refresh.|Hindi kumpleto ang natanggap na datos ng mga produkto. I-refresh ang pahina.
+Choose a JPG, PNG, or WebP photo up to 5 MB.|Pumili ng JPG, PNG, o WebP na larawang hindi lalampas sa 5 MB.
+The selected file is not a valid JPG, PNG, or WebP photo.|Hindi wastong JPG, PNG, o WebP na larawan ang napiling file.
+Complete the product and seller information.|Kumpletuhin ang impormasyon ng produkto at ng nagbebenta.
+Choose a valid category and product type.|Pumili ng wastong kategorya at uri ng produkto.
+Enter a valid contact phone number.|Maglagay ng wastong numero ng telepono.
+Enter a positive price with at most two decimal places.|Maglagay ng presyong higit sa zero na may hanggang dalawang digit pagkatapos ng decimal.
+Enter a nonnegative stock quantity with at most three decimal places.|Maglagay ng dami ng stock na zero o higit pa, na may hanggang tatlong digit pagkatapos ng decimal.
+Choose a valid product status.|Pumili ng wastong katayuan ng produkto.
+Keep the description within 3000 characters.|Limitahan ang paglalarawan sa 3000 karakter.
+Choose a product photo.|Pumili ng larawan ng produkto.
+You can only manage your own products.|Sarili mong mga produkto lamang ang maaari mong pamahalaan.
+Photo upload failed. Check your connection and product-photos bucket permissions.|Hindi na-upload ang larawan. Suriin ang koneksiyon at mga pahintulot sa product-photos bucket.
+This product changed or was deleted. Refresh before editing again.|Nabago o nabura ang produktong ito. I-refresh bago muling mag-edit.
+Product could not be saved. Refresh before retrying and check database permissions.|Hindi na-save ang produkto. I-refresh bago subukang muli at suriin ang mga pahintulot sa database.
+Product saved, but the previous photo could not be removed.|Na-save ang produkto, ngunit hindi maalis ang dating larawan.
+Product could not be deleted. Refresh first; it may have changed or you may lack permission.|Hindi mabura ang produkto. I-refresh muna; maaaring nabago ito o wala kang sapat na pahintulot.
+Product deleted, but its photo could not be removed.|Nabura ang produkto, ngunit hindi maalis ang larawan nito.
+Full Name|Buong Pangalan
+Enter your full name (up to 120 characters).|Ilagay ang iyong buong pangalan (hanggang 120 karakter).
+Language|Wika
+Support Local Farmers and Fisherfolk|Suportahan ang mga Lokal na Magsasaka at Mangingisda
+Sort by|Ayusin ayon sa
+I have read and agree to follow the Kaani Web Marketplace Rules.|Nabasa ko at sumasang-ayon akong sundin ang mga Tuntunin ng Kaani Web Marketplace.
+Please read and agree to the Kaani Web Marketplace Rules to publish your listing.|Basahin at sang-ayunan ang mga tuntunin ng Kaani Web Marketplace bago ilathala ang produkto.
+Knowledge & Training Hub|Sentro ng Kaalaman at Pagsasanay
+Empowering coastal fisherfolk and smallholder farmers with science-backed sustainable practices.|Pinalalakas ang mga mangingisda at maliliit na magsasaka sa pamamagitan ng mga likas-kayang pamamaraang batay sa agham.
+Isalin sa Filipino|Isalin sa Tagalog
+Switch to English|Lumipat sa English
+Unit 1: Introduction to Fish Physiology|Yunit 1: Panimula sa Pisyolohiya ng Isda
+Learning Objectives|Mga Layunin sa Pag-aaral
+Key Takeaway|Mahalagang Aral
+Test your knowledge on this module with the interactive quiz!|Subukin ang kaalaman sa modyul na ito gamit ang interaktibong pagsusulit!
+Take Module Quiz|Sagutan ang Pagsusulit sa Modyul
+The product is currently available for purchase or inquiry.|Maaaring bilhin o itanong ang produkto sa kasalukuyan.
+The product has no remaining stock.|Wala nang natitirang stock ng produkto.
+The product cannot currently be purchased or is temporarily unavailable.|Hindi mabibili ang produkto sa kasalukuyan o pansamantala itong hindi magagamit.
+TRIAL MODULE|MODYUL NA PANSUBOK
+dont click this is for trial only|Huwag pindutin; para sa pagsubok lamang ito.
+Fish|Isda
+Products could not be loaded.|Hindi ma-load ang mga produkto.
+Product could not be saved.|Hindi ma-save ang produkto.
+Product could not be deleted.|Hindi mabura ang produkto.
+Invalid photo.|Hindi wastong larawan.
+I don't know|Hindi ko alam
 `;
 
 export const filipino: Record<string, string> = Object.fromEntries(pairs.trim().split('\n').map(line => line.split('|').map(part => part.trim())));

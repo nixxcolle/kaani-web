@@ -57,7 +57,7 @@ export const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
               size="lg"
               asChild
             >
-              <Link to="/auth?role=user">{tx("Sign In or Create Account ")}<ArrowRight className="h-4 w-4" />
+              <Link to="/auth">{tx("Sign In or Create Account ")}<ArrowRight className="h-4 w-4" />
               </Link>
             </Button>
             

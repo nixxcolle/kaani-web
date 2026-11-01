@@ -11,7 +11,6 @@ import {
   ExternalLink, 
   Droplet, 
   Fish, 
-  Calculator, 
   Sparkles, 
   ArrowRight,
   ShieldCheck,
@@ -26,13 +25,6 @@ import Footer from "@/components/Footer";
 const Sustainability = () => {
   const tx = useText();
   const [selectedFilter, setSelectedFilter] = useState<string>("All");
-
-  // Interactive Impact Calculator state
-  const [farmHectares, setFarmHectares] = useState<number>(2);
-  const [irrigationType, setIrrigationType] = useState<"flood" | "drip">("drip");
-
-  const estimatedWaterSavedLiters = irrigationType === "drip" ? farmHectares * 1800000 : 0;
-  const estimatedFuelSavedPhp = irrigationType === "drip" ? farmHectares * 24000 : 0;
 
   const innovations = [
     {
@@ -172,86 +164,6 @@ const Sustainability = () => {
             <h1 className="text-2xl sm:text-4xl md:text-5xl font-extrabold font-heading text-kaani-dark tracking-tight">{tx("Sustainability Hub")}</h1>
 
             <p className="text-sm sm:text-base md:text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed">{tx("Explore eco-friendly aquaculture, circular soil regeneration, and zero-emission irrigation solutions reshaping livelihoods.")}</p>
-          </div>
-        </div>
-      </section>
-
-      {/* Interactive Resource Savings Calculator */}
-      <section className="py-8 pb-14">
-        <div className="container px-4">
-          <div className="max-w-4xl mx-auto rounded-3xl bg-white shadow-elevated border border-emerald-100 p-6 md:p-10 space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
-              <div>
-                <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-emerald-800 bg-emerald-50 px-3 py-1 rounded-full mb-1">
-                  <Calculator className="h-3.5 w-3.5" />
-                  <span>{tx("Interactive Estimator")}</span>
-                </div>
-                <h3 className="text-xl font-bold font-heading text-slate-900">{tx("Solar Drip Irrigation Impact Estimator")}</h3>
-              </div>
-              <Badge className="bg-emerald-600 text-white w-fit">{tx("Live Calculation")}</Badge>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-4">
-                <div>
-                  <label htmlFor="sustainability-field-1" className="text-xs font-bold text-slate-700 block mb-1">{tx("Farmland Size (Hectares): ")}<span className="text-kaani-primary text-base font-extrabold">{tx(farmHectares)}{tx(" ha")}</span>
-                  </label>
-                  <input id="sustainability-field-1"
-                    type="range"
-                    min="1"
-                    max="10"
-                    step="0.5"
-                    value={farmHectares}
-                    onChange={(e) => setFarmHectares(parseFloat(e.target.value))}
-                    className="w-full accent-emerald-600"
-                  />
-                  <div className="flex justify-between text-[11px] text-muted-foreground mt-1">
-                    <span>{tx("1 ha")}</span>
-                    <span>{tx("5 ha")}</span>
-                    <span>{tx("10 ha")}</span>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-xs font-bold text-slate-700 block mb-1">{tx("Irrigation Method")}</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      onClick={() => setIrrigationType("drip")}
-                      className={`p-2.5 rounded-xl text-xs font-bold border transition-all ${
-                        irrigationType === "drip"
-                          ? "bg-kaani-primary text-white border-kaani-primary shadow-xs"
-                          : "bg-slate-50 text-slate-700 border-slate-200"
-                      }`}
-                    >{tx("Solar Drip (Eco)")}</button>
-                    <button
-                      onClick={() => setIrrigationType("flood")}
-                      className={`p-2.5 rounded-xl text-xs font-bold border transition-all ${
-                        irrigationType === "flood"
-                          ? "bg-slate-700 text-white border-slate-700 shadow-xs"
-                          : "bg-slate-50 text-slate-700 border-slate-200"
-                      }`}
-                    >{tx("Traditional Furrow")}</button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Output Cards */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="p-4 rounded-2xl bg-sky-50 border border-sky-100 flex flex-col justify-between">
-                  <div className="text-xs text-sky-800 font-bold uppercase tracking-wider">{tx("Est. Water Saved")}</div>
-                  <div className="text-2xl font-black font-heading text-sky-950 mt-2">
-                    {tx((estimatedWaterSavedLiters / 1000).toLocaleString())}{tx(" m³")}</div>
-                  <div className="text-[11px] text-sky-700 mt-1">{tx("Per harvest season")}</div>
-                </div>
-
-                <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-100 flex flex-col justify-between">
-                  <div className="text-xs text-emerald-800 font-bold uppercase tracking-wider">{tx("Est. Diesel Saved")}</div>
-                  <div className="text-2xl font-black font-heading text-emerald-950 mt-2">{tx("₱")}{tx(estimatedFuelSavedPhp.toLocaleString())}
-                  </div>
-                  <div className="text-[11px] text-emerald-700 mt-1">{tx("Pumping fuel savings")}</div>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
       </section>

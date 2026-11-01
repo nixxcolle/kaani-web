@@ -2,6 +2,9 @@ export type ProductStatus = "Available" | "Out of Stock" | "Unavailable";
 
 export interface Product {
   id: string;
+  ownerId?: string;
+  photoPath?: string;
+  updatedAt?: string;
   name: string;
   category: "Vegetables & Fruits" | "Rice & Grains" | "Livestock & Poultry" | "Fish & Seafood" | "Processed Products" | "Others";
   type: "Farm Product" | "Fishery Product" | "Processed Product";
